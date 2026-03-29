@@ -451,7 +451,113 @@ HAVING AVG(gs.cash_earned) > (
     FROM Game_Sessions
 );
 
+-- ==============================================================================
+-- Q16. THE "BROKE STUDENT" WARNING (VIEW)
+-- Functionality: Creates a reusable virtual table (view) to easily monitor and identify students whose wallet balances have dropped below $100, allowing administration to send low-balance alerts.
+-- Concepts Covered: CREATE VIEW, SELECT, WHERE
+-- ==============================================================================
+CREATE VIEW Low_Balance_Students AS
+SELECT roll_number, full_name, current_balance
+FROM Students
+WHERE current_balance < 100.00;
 
+
+-- ==============================================================================
+-- Q17. TOTAL CAMPUS ECONOMY (ADVANCED AGGREGATION)
+-- Functionality: Calculates the total sum of all funds currently held across every student's wallet to determine the overall digital economy and liabilities of the campus system.
+-- Concepts Covered: SELECT, SUM (Aggregation)
+-- ==============================================================================
+SELECT SUM(current_balance) AS total_campus_economy
+FROM Students;
+
+-- ==============================================================================
+-- Q18. THE "LOSS LEADER" DISCOUNT (COMPLEX UPDATE)
+-- Functionality: Apply a 10% discount to any Cafeteria items that have never been purchased by any student, hoping to boost their sales.
+-- Concepts Covered: UPDATE, WHERE, Subquery, NOT IN
+-- ==============================================================================
+UPDATE Cafeteria_Items
+SET price = price * 0.90
+WHERE item_id NOT IN (
+    SELECT DISTINCT item_id 
+    FROM Cafeteria_Order_Details
+);
+SELECT * FROM Cafeteria_Items;
+
+-- ==============================================================================
+-- Q19. IDENTIFYING DORMANT ACCOUNTS (ADVANCED SET OPERATIONS)
+-- Functionality: Find the names of students who have registered an account but have strictly zero activity across the entire campus (No Games, No Cafeteria Orders, No Bookshop Orders).
+-- Concepts Covered: EXCEPT, UNION, Subqueries
+-- ==============================================================================
+SELECT student_id, full_name FROM Students
+EXCEPT
+(
+    SELECT s.student_id, s.full_name 
+    FROM Students s JOIN Game_Sessions gs ON s.student_id = gs.student_id
+    UNION
+    SELECT s.student_id, s.full_name 
+    FROM Students s JOIN Cafeteria_Orders co ON s.student_id = co.student_id
+    UNION
+    SELECT s.student_id, s.full_name 
+    FROM Students s JOIN Bookshop_Orders bo ON s.student_id = bo.student_id
+);
+
+-- ==============================================================================
+-- Q20. HEAVY SPENDERS ANALYSIS (CORRELATED MATH & SUBQUERIES)
+-- Functionality: Identify students whose total spending on campus (Cafeteria + Bookshop) is strictly greater than the total cash they have earned from playing E-Sports.
+-- Concepts Covered: SELECT, WHERE, Multiple Nested Subqueries, SUM
+-- ==============================================================================
+SELECT s.full_name
+FROM Students s
+WHERE (
+    COALESCE((SELECT SUM(total_amount) FROM Cafeteria_Orders WHERE student_id = s.student_id), 0) 
+    + 
+    COALESCE((SELECT SUM(total_amount) FROM Bookshop_Orders WHERE student_id = s.student_id), 0)
+) > (
+    COALESCE((SELECT SUM(cash_earned) FROM Game_Sessions WHERE student_id = s.student_id AND status = 'PROCESSED'), 0)
+);
+
+-- ==============================================================================
+-- Q21. THE "OUT OF STOCK" PREDICTOR (COMPLEX AGGREGATION)
+-- Functionality: List items in the Bookshop where the total quantity ever sold is greater than the current stock remaining on shelves, helping management know what to reorder immediately.
+-- Concepts Covered: INNER JOIN, SUM, GROUP BY, HAVING, ORDER BY
+-- ==============================================================================
+SELECT 
+    b.item_name, 
+    b.stock_quantity AS current_stock, 
+    SUM(bod.quantity_purchased) AS total_historical_sales
+FROM Bookshop_Items b
+JOIN Bookshop_Order_Details bod ON b.item_id = bod.item_id
+GROUP BY b.item_name, b.stock_quantity
+HAVING SUM(bod.quantity_purchased) > b.stock_quantity
+ORDER BY current_stock ASC;
+
+-- ==============================================================================
+-- Q22. CROSS-CAMPUS ELITE (INTERSECTION WITH CONDITIONS)
+-- Functionality: Retrieve the names of elite students who have both earned a massive payout (over $1000) in a single game session AND actively purchase academic materials from the Bookshop.
+-- Concepts Covered: INTERSECT, INNER JOIN, WHERE
+-- ==============================================================================
+SELECT s.full_name 
+FROM Students s
+JOIN Game_Sessions gs ON s.student_id = gs.student_id
+WHERE gs.cash_earned > 1000.00
+
+INTERSECT
+
+SELECT s.full_name 
+FROM Students s
+JOIN Bookshop_Orders bo ON s.student_id = bo.student_id;
+
+-- ==============================================================================
+-- Q23. FAILED TRANSACTION CLEANUP (DELETE WITH SUBQUERY)
+-- Functionality: Delete the specific order details (the cart items) for any Cafeteria Order that has been marked as 'FAILED', keeping the database clean of abandoned carts.
+-- Concepts Covered: DELETE, WHERE, IN, Subquery
+-- ==============================================================================
+DELETE FROM Cafeteria_Order_Details
+WHERE order_id IN (
+    SELECT order_id 
+    FROM Cafeteria_Orders 
+    WHERE status = 'FAILED'
+);
 
 
 
