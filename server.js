@@ -2,17 +2,50 @@ require('dotenv').config();
 const express = require('express');
 const cors = require('cors');
 
+// Initialize the express application
 const app = express();
 
+// Global middleware
 app.use(cors());
 app.use(express.json());
 
+// Custom middleware
+const { verifyToken } = require('./middleware/authMiddleware');
+
+// Import controllers
 const { loginStudent } = require('./controllers/authController');
 const { getStudentDashboard } = require('./controllers/dashboardController');
+const { recordSession } = require('./controllers/gameController');
+const { placeOrder } = require('./controllers/cafeteriaController');
+const { placeBookshopOrder } = require('./controllers/bookshopController');
 
-// Define routes
+// ------------------
+// --- API ROUTES ---
+// ------------------
+
+// basic health check
+app.get('/api/health', (req, res) => {
+    res.status(200).json({ status: 'Server is running, database is ready.' });
+});
+
+// Authentication route (public)
 app.post('/api/auth/login', loginStudent);
-app.get('/api/dashboard/:id', getStudentDashboard);
+
+// Student Dashboard Route (Protected)
+app.get('/api/dashboard/:id', verifyToken, getStudentDashboard);
+
+// E-Sports Game Engine Route (Protected)
+app.post('/api/games/session', verifyToken, recordSession);
+
+// Cafeteria Checkout Route (Protected)
+app.post('/api/cafeteria/checkout', verifyToken, placeOrder);
+
+// Bookshop order Route (Protected)
+app.post('/api/bookshop/checkout', verifyToken, placeBookshopOrder);
+
+// ------------------------
+// --- SERVER BOOTSTRAP ---
+// ------------------------
 
 const PORT = process.env.PORT || 5000;
 

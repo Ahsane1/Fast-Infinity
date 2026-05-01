@@ -29,7 +29,7 @@ const loginStudent = async (req, res) => {
         const token = jwt.sign(
             { student_id: student.student_id, roll_number: student.roll_number },
             process.env.JWT_SECRET,
-            { expiresIN: '24h' }
+            { expiresIn: '24h' }
         );
 
         // 4. Send back the token and basic user data
