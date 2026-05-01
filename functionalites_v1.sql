@@ -1036,367 +1036,6 @@ $$;
 --       Q12. Session Heatmap  (student × game × hour-of-day)
 -- ============================================================
 
-
--- ============================================================
--- SECTION 1 : EXPLICIT TRANSACTIONS
--- ============================================================
-
--- ─────────────────────────────────────────────────────────────
--- T1. Atomic Cafeteria Order
---
---  Demonstrates a raw BEGIN → validate → mutate → COMMIT block
---  with a structured EXCEPTION handler that always rolls back
---  on any error and logs the failure reason.
---  This is the pattern your backend (Node/Python/Java) should
---  wrap around every order call.
--- ─────────────────────────────────────────────────────────────
-DO $$
-DECLARE
-    v_student_id    INT     := 1;
-    v_item_id       INT     := 2;
-    v_quantity      INT     := 3;
-    v_price         DECIMAL(10,2);
-    v_stock         INT;
-    v_balance       DECIMAL(10,2);
-    v_total         DECIMAL(10,2);
-    v_order_id      INT;
-BEGIN
-    -- ── All statements below are inside ONE transaction ───────
-    BEGIN
-
-        -- 1. Lock student; read balance
-        SELECT current_balance
-        INTO   v_balance
-        FROM   Students
-        WHERE  student_id = v_student_id
-        FOR UPDATE;
-
-        IF NOT FOUND THEN
-            RAISE EXCEPTION 'STUDENT_NOT_FOUND';
-        END IF;
-
-        -- 2. Lock item; validate stock and active status
-        SELECT price, stock_quantity
-        INTO   v_price, v_stock
-        FROM   Cafeteria_Items
-        WHERE  item_id  = v_item_id
-          AND  is_active = TRUE
-        FOR UPDATE;
-
-        IF NOT FOUND THEN
-            RAISE EXCEPTION 'ITEM_NOT_FOUND_OR_INACTIVE';
-        END IF;
-
-        IF v_stock < v_quantity THEN
-            RAISE EXCEPTION 'INSUFFICIENT_STOCK: has=% needed=%', v_stock, v_quantity;
-        END IF;
-
-        v_total := v_price * v_quantity;
-
-        IF v_balance < v_total THEN
-            RAISE EXCEPTION 'INSUFFICIENT_BALANCE: wallet=% cost=%', v_balance, v_total;
-        END IF;
-
-        -- 3. Persist order
-        INSERT INTO Cafeteria_Orders (student_id, total_amount, status)
-        VALUES (v_student_id, v_total, 'COMPLETED')
-        RETURNING order_id INTO v_order_id;
-
-        INSERT INTO Cafeteria_Order_Details
-            (order_id, item_id, quantity_purchased, unit_price_at_purchase)
-        VALUES (v_order_id, v_item_id, v_quantity, v_price);
-
-        -- 4. Deduct stock
-        UPDATE Cafeteria_Items
-        SET    stock_quantity = stock_quantity - v_quantity
-        WHERE  item_id = v_item_id;
-
-        INSERT INTO Cafeteria_Inventory_Logs
-            (item_id, change_amount, transaction_type, order_id)
-        VALUES (v_item_id, -v_quantity, 'PURCHASE', v_order_id);
-
-        -- 5. Deduct wallet
-        UPDATE Students
-        SET    current_balance = current_balance - v_total
-        WHERE  student_id = v_student_id;
-
-        INSERT INTO Wallet_Ledger
-            (student_id, transaction_type, amount, cafeteria_order_id)
-        VALUES (v_student_id, 'CAFETERIA_SPEND', -v_total, v_order_id);
-
-        RAISE NOTICE '[T1] Order % committed successfully. Total charged: %',
-            v_order_id, v_total;
-
-    EXCEPTION
-        WHEN OTHERS THEN
-            -- Any error inside the BEGIN…EXCEPTION block triggers
-            -- an automatic rollback of everything above.
-            RAISE WARNING '[T1] Transaction ROLLED BACK — %: %',
-                SQLSTATE, SQLERRM;
-            RAISE;          -- re-raise so the caller also sees the error
-    END;
-END;
-$$;
-
-
--- ─────────────────────────────────────────────────────────────
--- T2. Batch Cafeteria Restock with per-item SAVEPOINTs
---
---  Partial-success pattern:
---    Each item gets its own SAVEPOINT. A bad item (e.g. invalid
---    id) is rolled back to its savepoint and skipped, while all
---    valid items are committed. The outer transaction commits at
---    the end even if some items failed.
---
---  This is the correct pattern for bulk admin operations where
---  you don't want one bad row to cancel everything.
--- ─────────────────────────────────────────────────────────────
-DO $$
-DECLARE
-    -- (item_id, restock_qty) pairs to process
-    v_items     INT[][] := ARRAY[[1,100],[2,50],[9999,30],[3,75]];
-    v_pair      INT[];
-    v_item_id   INT;
-    v_qty       INT;
-    v_item_name VARCHAR(100);
-    v_new_stock INT;
-    v_ok        INT := 0;
-    v_skip      INT := 0;
-BEGIN
-    FOREACH v_pair SLICE 1 IN ARRAY v_items
-    LOOP
-        v_item_id := v_pair[1];
-        v_qty     := v_pair[2];
-
-        -- The BEGIN statement here acts as our automatic savepoint
-        BEGIN
-            SELECT item_name INTO v_item_name
-            FROM   Cafeteria_Items
-            WHERE  item_id = v_item_id
-            FOR UPDATE;
-
-            IF NOT FOUND THEN
-                RAISE EXCEPTION 'ITEM_NOT_FOUND: id=%', v_item_id;
-            END IF;
-
-            IF v_qty <= 0 THEN
-                RAISE EXCEPTION 'INVALID_QTY: must be positive';
-            END IF;
-
-            UPDATE Cafeteria_Items
-            SET    stock_quantity = stock_quantity + v_qty
-            WHERE  item_id = v_item_id
-            RETURNING stock_quantity INTO v_new_stock;
-
-            INSERT INTO Cafeteria_Inventory_Logs
-                (item_id, change_amount, transaction_type)
-            VALUES (v_item_id, v_qty, 'RESTOCK');
-
-            -- If we reach here, it was successful. 
-            v_ok := v_ok + 1;
-            RAISE NOTICE '[T2] ✓ Restocked item % ("%") → new stock=%',
-                v_item_id, v_item_name, v_new_stock;
-
-        EXCEPTION
-            WHEN OTHERS THEN
-                -- PostgreSQL automatically rolls back the current BEGIN block!
-                -- We just need to log the error and let the loop continue.
-                v_skip := v_skip + 1;
-                RAISE WARNING '[T2] ✗ Skipped item_id=% — %: %',
-                    v_item_id, SQLSTATE, SQLERRM;
-        END;
-    END LOOP;
-
-    RAISE NOTICE '[T2] Batch complete: % restocked, % skipped.', v_ok, v_skip;
-END;
-$$;
-
-
--- ─────────────────────────────────────────────────────────────
--- T3. Wallet Transfer between two Students
---
---  A true double-entry transfer:
---    • Debit  source  student
---    • Credit target student
---    • Write  two ledger rows (MANUAL_ADJUSTMENT in both directions)
---    • Enforce consistent lock ordering (lower id first) to
---      prevent deadlocks when concurrent transfers cross paths.
--- ─────────────────────────────────────────────────────────────
-CREATE OR REPLACE PROCEDURE sp_wallet_transfer(
-    p_from_student_id INT,
-    p_to_student_id   INT,
-    p_amount          DECIMAL(10,2)
-)
-LANGUAGE plpgsql
-AS $$
-DECLARE
-    v_from_balance DECIMAL(10,2);
-    v_lock_first   INT;
-    v_lock_second  INT;
-BEGIN
-    IF p_amount <= 0 THEN
-        RAISE EXCEPTION 'INVALID_AMOUNT: transfer must be positive';
-    END IF;
-
-    IF p_from_student_id = p_to_student_id THEN
-        RAISE EXCEPTION 'SAME_STUDENT: cannot transfer to yourself';
-    END IF;
-
-    -- ── Deadlock prevention: always lock the lower ID first ───
-    v_lock_first  := LEAST   (p_from_student_id, p_to_student_id);
-    v_lock_second := GREATEST(p_from_student_id, p_to_student_id);
-
-    PERFORM student_id FROM Students WHERE student_id = v_lock_first  FOR UPDATE;
-    PERFORM student_id FROM Students WHERE student_id = v_lock_second FOR UPDATE;
-
-    -- Validate source balance (rows already locked)
-    SELECT current_balance INTO v_from_balance
-    FROM   Students WHERE student_id = p_from_student_id;
-
-    IF NOT FOUND THEN
-        RAISE EXCEPTION 'STUDENT_NOT_FOUND: from_id=%', p_from_student_id;
-    END IF;
-
-    IF NOT EXISTS (SELECT 1 FROM Students WHERE student_id = p_to_student_id) THEN
-        RAISE EXCEPTION 'STUDENT_NOT_FOUND: to_id=%', p_to_student_id;
-    END IF;
-
-    IF v_from_balance < p_amount THEN
-        RAISE EXCEPTION 'INSUFFICIENT_BALANCE: wallet=%.2f transfer=%.2f',
-            v_from_balance, p_amount;
-    END IF;
-
-    -- ── Debit source ──────────────────────────────────────────
-    UPDATE Students SET current_balance = current_balance - p_amount
-    WHERE  student_id = p_from_student_id;
-
-    INSERT INTO Wallet_Ledger (student_id, transaction_type, amount)
-    VALUES (p_from_student_id, 'MANUAL_ADJUSTMENT', -p_amount);
-
-    -- ── Credit target ─────────────────────────────────────────
-    UPDATE Students SET current_balance = current_balance + p_amount
-    WHERE  student_id = p_to_student_id;
-
-    INSERT INTO Wallet_Ledger (student_id, transaction_type, amount)
-    VALUES (p_to_student_id, 'MANUAL_ADJUSTMENT', p_amount);
-
-    RAISE NOTICE '[T3] Transferred %.2f from student % → student %',
-        p_amount, p_from_student_id, p_to_student_id;
-END;
-$$;
-
-
--- ─────────────────────────────────────────────────────────────
--- T4. End-of-Day Settlement Procedure
---
---  Uses explicit COMMIT inside the procedure body (PostgreSQL
---  11+ feature — only valid when called at top level, NOT inside
---  an existing transaction block).
---
---  Steps
---    1. Snapshot daily revenue into an audit log table
---       (uses a temp table here for portability).
---    2. Mark all PENDING orders older than 1 day as FAILED.
---    3. Commits after each phase so partial progress is saved
---       even if phase-2 or phase-3 fails.
--- ─────────────────────────────────────────────────────────────
-CREATE OR REPLACE PROCEDURE sp_end_of_day_settlement(
-    p_settlement_date DATE DEFAULT CURRENT_DATE
-)
-LANGUAGE plpgsql
-AS $$
-DECLARE
-    v_caf_revenue   DECIMAL(10,2);
-    v_bs_revenue    DECIMAL(10,2);
-    v_pending_caf   INT;
-    v_pending_bs    INT;
-BEGIN
-    RAISE NOTICE '[T4] === End-of-Day Settlement: % ===', p_settlement_date;
-
-    -- ── Phase 1: Compute and snapshot daily revenue ───────────
-    SELECT COALESCE(SUM(total_amount), 0) INTO v_caf_revenue
-    FROM   Cafeteria_Orders
-    WHERE  status = 'COMPLETED'
-      AND  order_timestamp::DATE = p_settlement_date;
-
-    SELECT COALESCE(SUM(total_amount), 0) INTO v_bs_revenue
-    FROM   Bookshop_Orders
-    WHERE  status = 'COMPLETED'
-      AND  order_timestamp::DATE = p_settlement_date;
-
-    RAISE NOTICE '[T4] Phase 1 — Cafeteria revenue: %.2f | Bookshop revenue: %.2f',
-        v_caf_revenue, v_bs_revenue;
-
-    COMMIT; -- ← Phase 1 permanently saved even if phase 2 fails
-
-    -- ── Phase 2: Expire stale PENDING cafeteria orders ───────
-    UPDATE Cafeteria_Orders
-    SET    status = 'FAILED'
-    WHERE  status = 'PENDING'
-      AND  order_timestamp < NOW() - INTERVAL '1 day';
-
-    GET DIAGNOSTICS v_pending_caf = ROW_COUNT;
-    RAISE NOTICE '[T4] Phase 2 — Expired % stale cafeteria orders.', v_pending_caf;
-
-    COMMIT; -- ← Phase 2 saved
-
-    -- ── Phase 3: Expire stale PENDING bookshop orders ────────
-    UPDATE Bookshop_Orders
-    SET    status = 'FAILED'
-    WHERE  status = 'PENDING'
-      AND  order_timestamp < NOW() - INTERVAL '1 day';
-
-    GET DIAGNOSTICS v_pending_bs = ROW_COUNT;
-    RAISE NOTICE '[T4] Phase 3 — Expired % stale bookshop orders.', v_pending_bs;
-
-    COMMIT; -- ← Phase 3 saved
-
-    RAISE NOTICE '[T4] Settlement complete.';
-
-EXCEPTION
-    WHEN OTHERS THEN
-        ROLLBACK;
-        RAISE WARNING '[T4] Settlement FAILED at phase — %: %', SQLSTATE, SQLERRM;
-        RAISE;
-END;
-$$;
-
--- Invoke at application shutdown / cron job:
--- CALL sp_end_of_day_settlement();
-
-
--- ─────────────────────────────────────────────────────────────
--- T5. Concurrent Double-Spend Guard  (illustrative demo)
---
---  Shows how SELECT ... FOR UPDATE prevents a student from
---  spending their balance twice in parallel sessions.
---  Run Session A and Session B simultaneously to see Session B
---  block until A commits, then correctly see the updated balance.
--- ─────────────────────────────────────────────────────────────
-
--- ── Session A (first connection) ──────────────────────────────
-/*
-BEGIN;
-    SELECT current_balance FROM Students WHERE student_id = 1 FOR UPDATE;
-    -- balance = 500.00
-    -- ... Session B is now BLOCKED here because of the row lock ...
-    UPDATE Students SET current_balance = current_balance - 300 WHERE student_id = 1;
-COMMIT;
--- Session B unblocks and sees balance = 200.00 (not the original 500.00)
-*/
-
--- ── Session B (second connection) ─────────────────────────────
-/*
-BEGIN;
-    SELECT current_balance FROM Students WHERE student_id = 1 FOR UPDATE;
-    -- Blocks until Session A commits, then reads 200.00
-    -- This correctly prevents the double-spend
-    UPDATE Students SET current_balance = current_balance - 300 WHERE student_id = 1;
-    -- RAISES: CHECK constraint violation (200 - 300 = -100 < 0)
-ROLLBACK;
-*/
-
-
 -- ============================================================
 -- SECTION 2 
 -- ============================================================
@@ -1995,6 +1634,9 @@ INSERT INTO Students (student_id, roll_number, password_hash, full_name, current
 ( 9, '21L-0201', '$2b$12$Ham.HashedPwd.MockOnly.000009', 'Hamza Qureshi',   3730.00),
 (10, '21L-0202', '$2b$12$Zar.HashedPwd.MockOnly.000010', 'Zara Hussain',    1460.00);
 
+
+INSERT INTO Students (student_id, roll_number, password_hash, full_name, current_balance) VALUES
+( 1, '24L-0001', '$2b$12$Ali.HashedPwd.MockOnly.000001', 'Ali Hassan',      1570.00);
 
 -- ────────────────────────────────────────────────────────────────
 -- 2. E-SPORTS GAMES
@@ -2771,6 +2413,376 @@ SELECT * FROM vw_wallet_transaction_history WHERE student_id = 1;
 
 -- Check leaderboard
 SELECT * FROM vw_esports_leaderboard ORDER BY game_rank LIMIT 10;
+
+
+
+
+
+
+
+
+------------------------------------------------------
+
+-- ============================================================
+-- SECTION 1 : EXPLICIT TRANSACTIONS
+-- ============================================================
+
+-- ─────────────────────────────────────────────────────────────
+-- T1. Atomic Cafeteria Order
+--
+--  Demonstrates a raw BEGIN → validate → mutate → COMMIT block
+--  with a structured EXCEPTION handler that always rolls back
+--  on any error and logs the failure reason.
+--  This is the pattern your backend (Node/Python/Java) should
+--  wrap around every order call.
+-- ─────────────────────────────────────────────────────────────
+DO $$
+DECLARE
+    v_student_id    INT     := 11;
+    v_item_id       INT     := 2;
+    v_quantity      INT     := 3;
+    v_price         DECIMAL(10,2);
+    v_stock         INT;
+    v_balance       DECIMAL(10,2);
+    v_total         DECIMAL(10,2);
+    v_order_id      INT;
+BEGIN
+    -- ── All statements below are inside ONE transaction ───────
+    BEGIN
+
+        -- 1. Lock student; read balance
+        SELECT current_balance
+        INTO   v_balance
+        FROM   Students
+        WHERE  student_id = v_student_id
+        FOR UPDATE;
+
+        IF NOT FOUND THEN
+            RAISE EXCEPTION 'STUDENT_NOT_FOUND';
+        END IF;
+
+        -- 2. Lock item; validate stock and active status
+        SELECT price, stock_quantity
+        INTO   v_price, v_stock
+        FROM   Cafeteria_Items
+        WHERE  item_id  = v_item_id
+          AND  is_active = TRUE
+        FOR UPDATE;
+
+        IF NOT FOUND THEN
+            RAISE EXCEPTION 'ITEM_NOT_FOUND_OR_INACTIVE';
+        END IF;
+
+        IF v_stock < v_quantity THEN
+            RAISE EXCEPTION 'INSUFFICIENT_STOCK: has=% needed=%', v_stock, v_quantity;
+        END IF;
+
+        v_total := v_price * v_quantity;
+
+        IF v_balance < v_total THEN
+            RAISE EXCEPTION 'INSUFFICIENT_BALANCE: wallet=% cost=%', v_balance, v_total;
+        END IF;
+
+        -- 3. Persist order
+        INSERT INTO Cafeteria_Orders (student_id, total_amount, status)
+        VALUES (v_student_id, v_total, 'COMPLETED')
+        RETURNING order_id INTO v_order_id;
+
+        INSERT INTO Cafeteria_Order_Details
+            (order_id, item_id, quantity_purchased, unit_price_at_purchase)
+        VALUES (v_order_id, v_item_id, v_quantity, v_price);
+
+        -- 4. Deduct stock
+        UPDATE Cafeteria_Items
+        SET    stock_quantity = stock_quantity - v_quantity
+        WHERE  item_id = v_item_id;
+
+        INSERT INTO Cafeteria_Inventory_Logs
+            (item_id, change_amount, transaction_type, order_id)
+        VALUES (v_item_id, -v_quantity, 'PURCHASE', v_order_id);
+
+        -- 5. Deduct wallet
+        UPDATE Students
+        SET    current_balance = current_balance - v_total
+        WHERE  student_id = v_student_id;
+
+        INSERT INTO Wallet_Ledger
+            (student_id, transaction_type, amount, cafeteria_order_id)
+        VALUES (v_student_id, 'CAFETERIA_SPEND', -v_total, v_order_id);
+
+        RAISE NOTICE '[T1] Order % committed successfully. Total charged: %',
+            v_order_id, v_total;
+
+    EXCEPTION
+        WHEN OTHERS THEN
+            -- Any error inside the BEGIN…EXCEPTION block triggers
+            -- an automatic rollback of everything above.
+            RAISE WARNING '[T1] Transaction ROLLED BACK — %: %',
+                SQLSTATE, SQLERRM;
+            RAISE;          -- re-raise so the caller also sees the error
+    END;
+END;
+$$;
+
+
+-- ─────────────────────────────────────────────────────────────
+-- T2. Batch Cafeteria Restock with per-item SAVEPOINTs
+--
+--  Partial-success pattern:
+--    Each item gets its own SAVEPOINT. A bad item (e.g. invalid
+--    id) is rolled back to its savepoint and skipped, while all
+--    valid items are committed. The outer transaction commits at
+--    the end even if some items failed.
+--
+--  This is the correct pattern for bulk admin operations where
+--  you don't want one bad row to cancel everything.
+-- ─────────────────────────────────────────────────────────────
+DO $$
+DECLARE
+    -- (item_id, restock_qty) pairs to process
+    v_items     INT[][] := ARRAY[[1,100],[2,50],[9999,30],[3,75]];
+    v_pair      INT[];
+    v_item_id   INT;
+    v_qty       INT;
+    v_item_name VARCHAR(100);
+    v_new_stock INT;
+    v_ok        INT := 0;
+    v_skip      INT := 0;
+BEGIN
+    FOREACH v_pair SLICE 1 IN ARRAY v_items
+    LOOP
+        v_item_id := v_pair[1];
+        v_qty     := v_pair[2];
+
+        -- The BEGIN statement here acts as our automatic savepoint
+        BEGIN
+            SELECT item_name INTO v_item_name
+            FROM   Cafeteria_Items
+            WHERE  item_id = v_item_id
+            FOR UPDATE;
+
+            IF NOT FOUND THEN
+                RAISE EXCEPTION 'ITEM_NOT_FOUND: id=%', v_item_id;
+            END IF;
+
+            IF v_qty <= 0 THEN
+                RAISE EXCEPTION 'INVALID_QTY: must be positive';
+            END IF;
+
+            UPDATE Cafeteria_Items
+            SET    stock_quantity = stock_quantity + v_qty
+            WHERE  item_id = v_item_id
+            RETURNING stock_quantity INTO v_new_stock;
+
+            INSERT INTO Cafeteria_Inventory_Logs
+                (item_id, change_amount, transaction_type)
+            VALUES (v_item_id, v_qty, 'RESTOCK');
+
+            -- If we reach here, it was successful. 
+            v_ok := v_ok + 1;
+            RAISE NOTICE '[T2] ✓ Restocked item % ("%") → new stock=%',
+                v_item_id, v_item_name, v_new_stock;
+
+        EXCEPTION
+            WHEN OTHERS THEN
+                -- PostgreSQL automatically rolls back the current BEGIN block!
+                -- We just need to log the error and let the loop continue.
+                v_skip := v_skip + 1;
+                RAISE WARNING '[T2] ✗ Skipped item_id=% — %: %',
+                    v_item_id, SQLSTATE, SQLERRM;
+        END;
+    END LOOP;
+
+    RAISE NOTICE '[T2] Batch complete: % restocked, % skipped.', v_ok, v_skip;
+END;
+$$;
+
+
+-- ─────────────────────────────────────────────────────────────
+-- T3. Wallet Transfer between two Students
+--
+--  A true double-entry transfer:
+--    • Debit  source  student
+--    • Credit target student
+--    • Write  two ledger rows (MANUAL_ADJUSTMENT in both directions)
+--    • Enforce consistent lock ordering (lower id first) to
+--      prevent deadlocks when concurrent transfers cross paths.
+-- ─────────────────────────────────────────────────────────────
+CREATE OR REPLACE PROCEDURE sp_wallet_transfer(
+    p_from_student_id INT,
+    p_to_student_id   INT,
+    p_amount          DECIMAL(10,2)
+)
+LANGUAGE plpgsql
+AS $$
+DECLARE
+    v_from_balance DECIMAL(10,2);
+    v_lock_first   INT;
+    v_lock_second  INT;
+BEGIN
+    IF p_amount <= 0 THEN
+        RAISE EXCEPTION 'INVALID_AMOUNT: transfer must be positive';
+    END IF;
+
+    IF p_from_student_id = p_to_student_id THEN
+        RAISE EXCEPTION 'SAME_STUDENT: cannot transfer to yourself';
+    END IF;
+
+    -- ── Deadlock prevention: always lock the lower ID first ───
+    v_lock_first  := LEAST   (p_from_student_id, p_to_student_id);
+    v_lock_second := GREATEST(p_from_student_id, p_to_student_id);
+
+    PERFORM student_id FROM Students WHERE student_id = v_lock_first  FOR UPDATE;
+    PERFORM student_id FROM Students WHERE student_id = v_lock_second FOR UPDATE;
+
+    -- Validate source balance (rows already locked)
+    SELECT current_balance INTO v_from_balance
+    FROM   Students WHERE student_id = p_from_student_id;
+
+    IF NOT FOUND THEN
+        RAISE EXCEPTION 'STUDENT_NOT_FOUND: from_id=%', p_from_student_id;
+    END IF;
+
+    IF NOT EXISTS (SELECT 1 FROM Students WHERE student_id = p_to_student_id) THEN
+        RAISE EXCEPTION 'STUDENT_NOT_FOUND: to_id=%', p_to_student_id;
+    END IF;
+
+    IF v_from_balance < p_amount THEN
+        RAISE EXCEPTION 'INSUFFICIENT_BALANCE: wallet=%.2f transfer=%.2f',
+            v_from_balance, p_amount;
+    END IF;
+
+    -- ── Debit source ──────────────────────────────────────────
+    UPDATE Students SET current_balance = current_balance - p_amount
+    WHERE  student_id = p_from_student_id;
+
+    INSERT INTO Wallet_Ledger (student_id, transaction_type, amount)
+    VALUES (p_from_student_id, 'MANUAL_ADJUSTMENT', -p_amount);
+
+    -- ── Credit target ─────────────────────────────────────────
+    UPDATE Students SET current_balance = current_balance + p_amount
+    WHERE  student_id = p_to_student_id;
+
+    INSERT INTO Wallet_Ledger (student_id, transaction_type, amount)
+    VALUES (p_to_student_id, 'MANUAL_ADJUSTMENT', p_amount);
+
+    RAISE NOTICE '[T3] Transferred %.2f from student % → student %',
+        p_amount, p_from_student_id, p_to_student_id;
+END;
+$$;
+
+
+-- ─────────────────────────────────────────────────────────────
+-- T4. End-of-Day Settlement Procedure
+--
+--  Uses explicit COMMIT inside the procedure body (PostgreSQL
+--  11+ feature — only valid when called at top level, NOT inside
+--  an existing transaction block).
+--
+--  Steps
+--    1. Snapshot daily revenue into an audit log table
+--       (uses a temp table here for portability).
+--    2. Mark all PENDING orders older than 1 day as FAILED.
+--    3. Commits after each phase so partial progress is saved
+--       even if phase-2 or phase-3 fails.
+-- ─────────────────────────────────────────────────────────────
+CREATE OR REPLACE PROCEDURE sp_end_of_day_settlement(
+    p_settlement_date DATE DEFAULT CURRENT_DATE
+)
+LANGUAGE plpgsql
+AS $$
+DECLARE
+    v_caf_revenue   DECIMAL(10,2);
+    v_bs_revenue    DECIMAL(10,2);
+    v_pending_caf   INT;
+    v_pending_bs    INT;
+BEGIN
+    RAISE NOTICE '[T4] === End-of-Day Settlement: % ===', p_settlement_date;
+
+    -- ── Phase 1: Compute and snapshot daily revenue ───────────
+    SELECT COALESCE(SUM(total_amount), 0) INTO v_caf_revenue
+    FROM   Cafeteria_Orders
+    WHERE  status = 'COMPLETED'
+      AND  order_timestamp::DATE = p_settlement_date;
+
+    SELECT COALESCE(SUM(total_amount), 0) INTO v_bs_revenue
+    FROM   Bookshop_Orders
+    WHERE  status = 'COMPLETED'
+      AND  order_timestamp::DATE = p_settlement_date;
+
+    RAISE NOTICE '[T4] Phase 1 — Cafeteria revenue: %.2f | Bookshop revenue: %.2f',
+        v_caf_revenue, v_bs_revenue;
+
+    COMMIT; -- ← Phase 1 permanently saved even if phase 2 fails
+
+    -- ── Phase 2: Expire stale PENDING cafeteria orders ───────
+    UPDATE Cafeteria_Orders
+    SET    status = 'FAILED'
+    WHERE  status = 'PENDING'
+      AND  order_timestamp < NOW() - INTERVAL '1 day';
+
+    GET DIAGNOSTICS v_pending_caf = ROW_COUNT;
+    RAISE NOTICE '[T4] Phase 2 — Expired % stale cafeteria orders.', v_pending_caf;
+
+    COMMIT; -- ← Phase 2 saved
+
+    -- ── Phase 3: Expire stale PENDING bookshop orders ────────
+    UPDATE Bookshop_Orders
+    SET    status = 'FAILED'
+    WHERE  status = 'PENDING'
+      AND  order_timestamp < NOW() - INTERVAL '1 day';
+
+    GET DIAGNOSTICS v_pending_bs = ROW_COUNT;
+    RAISE NOTICE '[T4] Phase 3 — Expired % stale bookshop orders.', v_pending_bs;
+
+    COMMIT; -- ← Phase 3 saved
+
+    RAISE NOTICE '[T4] Settlement complete.';
+
+EXCEPTION
+    WHEN OTHERS THEN
+        ROLLBACK;
+        RAISE WARNING '[T4] Settlement FAILED at phase — %: %', SQLSTATE, SQLERRM;
+        RAISE;
+END;
+$$;
+
+-- Invoke at application shutdown / cron job:
+-- CALL sp_end_of_day_settlement();
+
+
+-- ─────────────────────────────────────────────────────────────
+-- T5. Concurrent Double-Spend Guard  (illustrative demo)
+--
+--  Shows how SELECT ... FOR UPDATE prevents a student from
+--  spending their balance twice in parallel sessions.
+--  Run Session A and Session B simultaneously to see Session B
+--  block until A commits, then correctly see the updated balance.
+-- ─────────────────────────────────────────────────────────────
+
+-- ── Session A (first connection) ──────────────────────────────
+/*
+BEGIN;
+    SELECT current_balance FROM Students WHERE student_id = 1 FOR UPDATE;
+    -- balance = 500.00
+    -- ... Session B is now BLOCKED here because of the row lock ...
+    UPDATE Students SET current_balance = current_balance - 300 WHERE student_id = 1;
+COMMIT;
+-- Session B unblocks and sees balance = 200.00 (not the original 500.00)
+*/
+
+-- ── Session B (second connection) ─────────────────────────────
+/*
+BEGIN;
+    SELECT current_balance FROM Students WHERE student_id = 1 FOR UPDATE;
+    -- Blocks until Session A commits, then reads 200.00
+    -- This correctly prevents the double-spend
+    UPDATE Students SET current_balance = current_balance - 300 WHERE student_id = 1;
+    -- RAISES: CHECK constraint violation (200 - 300 = -100 < 0)
+ROLLBACK;
+*/
+
+
 
 
 
