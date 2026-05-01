@@ -1,3 +1,188 @@
+
+DROP TABLE IF EXISTS Cafeteria_Inventory_Logs CASCADE;
+DROP TABLE IF EXISTS Cafeteria_Order_Details CASCADE;
+DROP TABLE IF EXISTS Cafeteria_Items CASCADE;
+DROP TABLE IF EXISTS Wallet_Ledger CASCADE;
+DROP TABLE IF EXISTS Cafeteria_Orders CASCADE;
+DROP TABLE IF EXISTS Game_Sessions CASCADE;
+DROP TABLE IF EXISTS E_Sports_Games CASCADE;
+DROP TABLE IF EXISTS Bookshop_Order_Details CASCADE;
+DROP TABLE IF EXISTS Bookshop_Orders CASCADE;
+DROP TABLE IF EXISTS Bookshop_Items CASCADE;
+DROP TABLE IF EXISTS Students CASCADE;
+
+CREATE TABLE Students (
+    student_id SERIAL PRIMARY KEY,
+    roll_number VARCHAR(15) NOT NULL UNIQUE,
+    password_hash VARCHAR(255) NOT NULL,
+    full_name VARCHAR(100) NOT NULL,
+    current_balance DECIMAL(10,2) NOT NULL DEFAULT 0.00,
+    CONSTRAINT CHK_Students_Balance CHECK (current_balance >= 0)
+);
+
+CREATE TABLE Cafeteria_Items (
+    item_id SERIAL PRIMARY KEY,
+    item_name VARCHAR(100) NOT NULL UNIQUE,
+    description TEXT NULL,
+    price DECIMAL(10,2) NOT NULL,
+    stock_quantity INT NOT NULL DEFAULT 0,
+    category VARCHAR(50) NOT NULL,
+    is_active BOOLEAN NOT NULL DEFAULT TRUE,
+    
+    CONSTRAINT CHK_Cafeteria_Price CHECK (price > 0),
+    CONSTRAINT CHK_Cafeteria_Stock CHECK (stock_quantity >= 0)
+);
+
+CREATE TABLE Cafeteria_Orders (
+    order_id SERIAL PRIMARY KEY,
+    student_id INT NOT NULL,
+    order_timestamp TIMESTAMP NOT NULL DEFAULT CURRENT_TIMESTAMP,
+    total_amount DECIMAL(10,2) NOT NULL,
+    status VARCHAR(20) NOT NULL DEFAULT 'COMPLETED',
+    
+    CONSTRAINT FK_CafeteriaOrders_Students FOREIGN KEY (student_id) 
+        REFERENCES Students(student_id),
+    
+    CONSTRAINT CHK_Cafeteria_TotalAmount CHECK (total_amount >= 0),
+    CONSTRAINT CHK_Cafeteria_Status CHECK (status IN ('PENDING', 'COMPLETED', 'FAILED'))
+);
+
+CREATE TABLE Cafeteria_Order_Details (
+    order_id INT NOT NULL,
+    item_id INT NOT NULL,
+    quantity_purchased INT NOT NULL,
+    unit_price_at_purchase DECIMAL(10,2) NOT NULL,
+    
+    PRIMARY KEY (order_id, item_id),
+    
+    CONSTRAINT FK_OrderDetails_Orders FOREIGN KEY (order_id) 
+        REFERENCES Cafeteria_Orders(order_id),
+    CONSTRAINT FK_OrderDetails_Items FOREIGN KEY (item_id) 
+        REFERENCES Cafeteria_Items(item_id),
+    
+    CONSTRAINT CHK_OrderDetails_Quantity CHECK (quantity_purchased > 0)
+);
+
+CREATE TABLE Cafeteria_Inventory_Logs (
+    log_id SERIAL PRIMARY KEY,
+    item_id INT NOT NULL,
+    change_amount INT NOT NULL,
+    transaction_type VARCHAR(50) NOT NULL,
+    log_timestamp TIMESTAMP NOT NULL DEFAULT CURRENT_TIMESTAMP,
+    order_id INT NULL,
+    
+    CONSTRAINT FK_InventoryLogs_Items FOREIGN KEY (item_id) 
+        REFERENCES Cafeteria_Items(item_id),
+    CONSTRAINT FK_InventoryLogs_Orders FOREIGN KEY (order_id) 
+        REFERENCES Cafeteria_Orders(order_id),
+        
+    CONSTRAINT CHK_InventoryLogs_Type CHECK (transaction_type IN ('PURCHASE', 'RESTOCK', 'ADJUSTMENT'))
+);
+
+CREATE TABLE E_Sports_Games (
+    game_id SERIAL PRIMARY KEY,
+    external_game_code VARCHAR(50) NOT NULL UNIQUE, 
+    game_name VARCHAR(100) NOT NULL,
+    score_to_cash_ratio DECIMAL(8,4) NOT NULL,
+    is_active BOOLEAN NOT NULL DEFAULT TRUE,
+    
+    CONSTRAINT CHK_Games_Ratio CHECK (score_to_cash_ratio > 0)
+);
+
+CREATE TABLE Game_Sessions (
+    session_id SERIAL PRIMARY KEY,
+    student_id INT NOT NULL,
+    game_id INT NOT NULL,
+    external_match_id VARCHAR(100) UNIQUE NULL,
+    raw_score INT NOT NULL,
+    cash_earned DECIMAL(10,2) NOT NULL,
+    played_at TIMESTAMP NOT NULL DEFAULT CURRENT_TIMESTAMP,
+    status VARCHAR(20) NOT NULL DEFAULT 'PROCESSED',
+    
+    CONSTRAINT FK_GameSessions_Students FOREIGN KEY (student_id) 
+        REFERENCES Students(student_id),
+    CONSTRAINT FK_GameSessions_Games FOREIGN KEY (game_id) 
+        REFERENCES E_Sports_Games(game_id),
+        
+    CONSTRAINT CHK_GameSessions_Score CHECK (raw_score >= 0),
+    CONSTRAINT CHK_GameSessions_Status CHECK (status IN ('PROCESSED', 'REJECTED_SUSPICIOUS'))
+);
+
+CREATE TABLE Wallet_Ledger (
+    transaction_id SERIAL PRIMARY KEY,
+    student_id INT NOT NULL,
+    transaction_type VARCHAR(30) NOT NULL,
+    amount DECIMAL(10,2) NOT NULL, 
+    transaction_timestamp TIMESTAMP NOT NULL DEFAULT CURRENT_TIMESTAMP,
+    
+    game_session_id INT NULL,
+    cafeteria_order_id INT NULL,
+    bookshop_order_id INT NULL,
+    
+    CONSTRAINT FK_WalletLedger_Students FOREIGN KEY (student_id) 
+        REFERENCES Students(student_id),
+    CONSTRAINT FK_WalletLedger_GameSessions FOREIGN KEY (game_session_id) 
+        REFERENCES Game_Sessions(session_id),
+    CONSTRAINT FK_WalletLedger_Cafeteria FOREIGN KEY (cafeteria_order_id) 
+        REFERENCES Cafeteria_Orders(order_id),
+        
+    CONSTRAINT CHK_WalletLedger_Amount CHECK (amount <> 0), 
+    CONSTRAINT CHK_WalletLedger_Type CHECK (transaction_type IN ('GAME_EARNING', 'CAFETERIA_SPEND', 'BOOKSHOP_SPEND', 'MANUAL_ADJUSTMENT'))
+);
+
+CREATE TABLE Bookshop_Items (
+    item_id SERIAL PRIMARY KEY,
+    item_name VARCHAR(150) NOT NULL,
+    item_category VARCHAR(50) NOT NULL,
+    isbn VARCHAR(20) NULL,
+    author VARCHAR(100) NULL,
+    price DECIMAL(10,2) NOT NULL,
+    stock_quantity INT NOT NULL DEFAULT 0,
+    is_active BOOLEAN NOT NULL DEFAULT TRUE,
+    
+    CONSTRAINT CHK_Bookshop_Category CHECK (item_category IN ('TEXTBOOK', 'STATIONERY', 'ELECTRONICS', 'MERCHANDISE', 'OTHER')),
+    
+    CONSTRAINT CHK_Bookshop_Price CHECK (price > 0),
+    CONSTRAINT CHK_Bookshop_Stock CHECK (stock_quantity >= 0)
+);
+
+CREATE TABLE Bookshop_Orders (
+    order_id SERIAL PRIMARY KEY,
+    receipt_number VARCHAR(50) NOT NULL UNIQUE,
+    student_id INT NOT NULL,
+    order_timestamp TIMESTAMP NOT NULL DEFAULT CURRENT_TIMESTAMP,
+    total_amount DECIMAL(10,2) NOT NULL,
+    status VARCHAR(20) NOT NULL DEFAULT 'COMPLETED',
+    
+    CONSTRAINT FK_BookshopOrders_Students FOREIGN KEY (student_id) 
+        REFERENCES Students(student_id),
+        
+    CONSTRAINT CHK_Bookshop_TotalAmount CHECK (total_amount >= 0),
+    CONSTRAINT CHK_Bookshop_Status CHECK (status IN ('PENDING', 'COMPLETED', 'FAILED'))
+);
+
+CREATE TABLE Bookshop_Order_Details (
+    order_id INT NOT NULL,
+    item_id INT NOT NULL,
+    quantity_purchased INT NOT NULL,
+    unit_price_at_purchase DECIMAL(10,2) NOT NULL,
+    
+    PRIMARY KEY (order_id, item_id),
+    
+    CONSTRAINT FK_BookshopOrderDetails_Orders FOREIGN KEY (order_id) 
+        REFERENCES Bookshop_Orders(order_id),
+    CONSTRAINT FK_BookshopOrderDetails_Items FOREIGN KEY (item_id) 
+        REFERENCES Bookshop_Items(item_id),
+        
+    CONSTRAINT CHK_Bookshop_Quantity CHECK (quantity_purchased > 0)
+);
+
+ALTER TABLE Wallet_Ledger
+ADD CONSTRAINT FK_WalletLedger_Bookshop FOREIGN KEY (bookshop_order_id) 
+    REFERENCES Bookshop_Orders(order_id);
+
+
+
 -- ============================================================
 --  FAST-INFINITY  |  Database Layer
 --  PostgreSQL 14+
@@ -820,293 +1005,6 @@ END;
 $$;
 
 
--- ============================================================
--- SECTION 5 : COMPLEX ANALYTICAL QUERIES
--- (Ready to drop into reports, admin dashboards, or APIs)
--- ============================================================
-
--- ─────────────────────────────────────────────────────────────
--- 5A. Student 30-Day Spending Breakdown
---     Per student, per transaction type with running totals.
--- ─────────────────────────────────────────────────────────────
-SELECT
-    s.roll_number,
-    s.full_name,
-    wl.transaction_type,
-    COUNT(*)                                            AS transaction_count,
-    SUM(ABS(wl.amount))                                 AS total_spent,
-    ROUND(AVG(ABS(wl.amount)), 2)                       AS avg_per_transaction,
-    -- Running cumulative spend per student across types
-    SUM(SUM(ABS(wl.amount))) OVER (
-        PARTITION BY s.student_id
-        ORDER BY wl.transaction_type
-        ROWS BETWEEN UNBOUNDED PRECEDING AND CURRENT ROW
-    )                                                   AS cumulative_spend
-FROM Students s
-JOIN Wallet_Ledger wl ON s.student_id = wl.student_id
-WHERE wl.transaction_timestamp >= NOW() - INTERVAL '30 days'
-  AND wl.transaction_type IN ('CAFETERIA_SPEND', 'BOOKSHOP_SPEND')
-GROUP BY
-    s.student_id, s.roll_number, s.full_name, wl.transaction_type
-ORDER BY s.roll_number, wl.transaction_type;
-
-
--- ─────────────────────────────────────────────────────────────
--- 5B. Peak Cafeteria Hours  (hour × day-of-week heatmap data)
--- ─────────────────────────────────────────────────────────────
-SELECT
-    EXTRACT(DOW  FROM co.order_timestamp)::INT          AS day_of_week_num,  -- 0=Sun
-    TO_CHAR(co.order_timestamp, 'Day')                  AS day_of_week,
-    EXTRACT(HOUR FROM co.order_timestamp)::INT          AS hour_of_day,
-    COUNT(co.order_id)                                  AS order_count,
-    SUM(co.total_amount)                                AS revenue,
-    ROUND(AVG(co.total_amount), 2)                      AS avg_order_value,
-    RANK() OVER (ORDER BY COUNT(co.order_id) DESC)      AS busiest_rank
-FROM Cafeteria_Orders co
-WHERE co.status = 'COMPLETED'
-GROUP BY
-    EXTRACT(DOW  FROM co.order_timestamp),
-    TO_CHAR(co.order_timestamp, 'Day'),
-    EXTRACT(HOUR FROM co.order_timestamp)
-ORDER BY busiest_rank;
-
-
--- ─────────────────────────────────────────────────────────────
--- 5C. Top 10 Students by Total Wallet Activity
--- ─────────────────────────────────────────────────────────────
-SELECT
-    s.roll_number,
-    s.full_name,
-    s.current_balance,
-    SUM(CASE WHEN wl.amount > 0 THEN  wl.amount    ELSE 0 END) AS total_credited,
-    SUM(CASE WHEN wl.amount < 0 THEN  ABS(wl.amount) ELSE 0 END) AS total_debited,
-    COUNT(*)                                                      AS total_transactions,
-    DENSE_RANK() OVER (
-        ORDER BY SUM(ABS(wl.amount)) DESC
-    )                                                             AS activity_rank
-FROM Students s
-JOIN Wallet_Ledger wl ON s.student_id = wl.student_id
-GROUP BY s.student_id, s.roll_number, s.full_name, s.current_balance
-ORDER BY activity_rank
-LIMIT 10;
-
-
--- ─────────────────────────────────────────────────────────────
--- 5D. Most Popular Cafeteria Items with Revenue Share %
--- ─────────────────────────────────────────────────────────────
-WITH item_stats AS (
-    SELECT
-        ci.item_id,
-        ci.item_name,
-        ci.category,
-        ci.price                                                     AS current_price,
-        SUM(cod.quantity_purchased)                                   AS units_sold,
-        SUM(cod.quantity_purchased * cod.unit_price_at_purchase)      AS revenue
-    FROM Cafeteria_Items ci
-    JOIN Cafeteria_Order_Details cod ON ci.item_id   = cod.item_id
-    JOIN Cafeteria_Orders        co  ON cod.order_id = co.order_id
-                                    AND co.status = 'COMPLETED'
-    GROUP BY ci.item_id, ci.item_name, ci.category, ci.price
-),
-grand_total AS (
-    SELECT SUM(revenue) AS total FROM item_stats
-)
-SELECT
-    ist.item_name,
-    ist.category,
-    ist.current_price,
-    ist.units_sold,
-    ROUND(ist.revenue, 2)                                             AS revenue,
-    ROUND((ist.revenue / NULLIF(gt.total, 0)) * 100, 2)              AS revenue_share_pct,
-    RANK() OVER (ORDER BY ist.units_sold DESC)                        AS popularity_rank,
-    RANK() OVER (ORDER BY ist.revenue    DESC)                        AS revenue_rank
-FROM item_stats ist
-CROSS JOIN grand_total gt
-ORDER BY popularity_rank;
-
-
--- ─────────────────────────────────────────────────────────────
--- 5E. Fraud Review Dashboard
---     Suspicious sessions enriched with the student's own avg
---     score to give admins the context to decide.
--- ─────────────────────────────────────────────────────────────
-WITH per_student_game_stats AS (
-    SELECT
-        student_id,
-        game_id,
-        ROUND(AVG(raw_score), 0) AS avg_processed_score,
-        MAX(raw_score)            AS max_processed_score,
-        COUNT(*)                  AS total_clean_sessions
-    FROM   Game_Sessions
-    WHERE  status = 'PROCESSED'
-    GROUP BY student_id, game_id
-)
-SELECT
-    gs.session_id,
-    s.roll_number,
-    s.full_name,
-    eg.game_name,
-    gs.raw_score                                                            AS flagged_score,
-    gs.cash_earned                                                          AS cash_that_would_have_been_credited,
-    pss.avg_processed_score                                                 AS student_avg_score,
-    pss.max_processed_score                                                 AS student_personal_best,
-    pss.total_clean_sessions,
-    ROUND(gs.raw_score / NULLIF(pss.avg_processed_score, 0), 2)             AS score_vs_avg_multiplier,
-    gs.external_match_id,
-    gs.played_at
-FROM Game_Sessions            gs
-JOIN Students                  s   ON gs.student_id = s.student_id
-JOIN E_Sports_Games            eg  ON gs.game_id    = eg.game_id
-LEFT JOIN per_student_game_stats pss
-       ON pss.student_id = gs.student_id
-      AND pss.game_id    = gs.game_id
-WHERE gs.status = 'REJECTED_SUSPICIOUS'
-ORDER BY gs.played_at DESC;
-
-
--- ─────────────────────────────────────────────────────────────
--- 5F. Per-Student Game Performance Trend
---     Rolling 7-session average + cumulative earnings.
---     Use as the data source for a performance graph on the
---     student's profile page.
--- ─────────────────────────────────────────────────────────────
-SELECT
-    s.roll_number,
-    s.full_name,
-    eg.game_name,
-    gs.played_at::DATE                                       AS play_date,
-    gs.raw_score,
-    gs.cash_earned,
-
-    -- Rolling 7-session average score (per student per game)
-    ROUND(AVG(gs.raw_score) OVER (
-        PARTITION BY gs.student_id, gs.game_id
-        ORDER BY gs.played_at
-        ROWS BETWEEN 6 PRECEDING AND CURRENT ROW
-    ), 0)                                                    AS rolling_7_session_avg,
-
-    -- Cumulative earnings (per student per game)
-    SUM(gs.cash_earned) OVER (
-        PARTITION BY gs.student_id, gs.game_id
-        ORDER BY gs.played_at
-        ROWS BETWEEN UNBOUNDED PRECEDING AND CURRENT ROW
-    )                                                        AS cumulative_earnings,
-
-    -- Session number (for X-axis of charts)
-    ROW_NUMBER() OVER (
-        PARTITION BY gs.student_id, gs.game_id
-        ORDER BY gs.played_at
-    )                                                        AS session_number
-
-FROM Game_Sessions  gs
-JOIN Students        s  ON gs.student_id = s.student_id
-JOIN E_Sports_Games  eg ON gs.game_id    = eg.game_id
-WHERE gs.status = 'PROCESSED'
-ORDER BY s.roll_number, eg.game_name, gs.played_at;
-
-
--- ─────────────────────────────────────────────────────────────
--- 5G. Bookshop Revenue by Category (with MoM comparison)
--- ─────────────────────────────────────────────────────────────
-WITH monthly AS (
-    SELECT
-        bi.item_category,
-        DATE_TRUNC('month', bo.order_timestamp)           AS month,
-        SUM(bod.quantity_purchased * bod.unit_price_at_purchase) AS revenue,
-        SUM(bod.quantity_purchased)                       AS units_sold
-    FROM Bookshop_Items         bi
-    JOIN Bookshop_Order_Details bod ON bi.item_id   = bod.item_id
-    JOIN Bookshop_Orders        bo  ON bod.order_id = bo.order_id
-                                   AND bo.status = 'COMPLETED'
-    GROUP BY bi.item_category, DATE_TRUNC('month', bo.order_timestamp)
-)
-SELECT
-    item_category,
-    TO_CHAR(month, 'YYYY-MM')                             AS month,
-    ROUND(revenue, 2)                                     AS revenue,
-    units_sold,
-    LAG(revenue) OVER (
-        PARTITION BY item_category
-        ORDER BY month
-    )                                                     AS prev_month_revenue,
-    ROUND(
-        (revenue - LAG(revenue) OVER (
-            PARTITION BY item_category ORDER BY month
-        )) / NULLIF(LAG(revenue) OVER (
-            PARTITION BY item_category ORDER BY month
-        ), 0) * 100, 2
-    )                                                     AS revenue_growth_pct
-FROM monthly
-ORDER BY item_category, month DESC;
-
-
--- ─────────────────────────────────────────────────────────────
--- 5H. Idle Students  (no wallet activity in last 30 days)
---     Use for re-engagement campaigns or balance expiry logic.
--- ─────────────────────────────────────────────────────────────
-SELECT
-    s.student_id,
-    s.roll_number,
-    s.full_name,
-    s.current_balance,
-    MAX(wl.transaction_timestamp)    AS last_activity,
-    NOW() - MAX(wl.transaction_timestamp) AS idle_duration
-FROM Students s
-LEFT JOIN Wallet_Ledger wl ON s.student_id = wl.student_id
-GROUP BY s.student_id, s.roll_number, s.full_name, s.current_balance
-HAVING MAX(wl.transaction_timestamp) < NOW() - INTERVAL '30 days'
-    OR MAX(wl.transaction_timestamp) IS NULL
-ORDER BY last_activity ASC NULLS FIRST;
-
-
--- ============================================================
--- EXAMPLE USAGE
--- ============================================================
-
-
--- Register a student
-CALL sp_register_student('23L-1234', 'Ali Hassan', 'bcrypt_hash_here', 500.00);
-
--- Place a cafeteria order (burger × 1, fries × 2)
-DO $$
-DECLARE v_order_id INT; v_total DECIMAL;
-BEGIN
-    CALL sp_place_cafeteria_order(
-        1,
-        '[{"item_id": 1, "quantity": 1}, {"item_id": 3, "quantity": 2}]'::JSONB,
-        v_order_id,
-        v_total
-    );
-    RAISE NOTICE 'Order ID: %, Total: %', v_order_id, v_total;
-END;
-$$;
-
--- Record a game session
-DO $$
-DECLARE v_sid INT; v_cash DECIMAL; v_status VARCHAR;
-BEGIN
-    CALL sp_record_game_session(
-        1, 'VALORANT_FAST', 'MATCH_ABC123', 4500,
-        v_sid, v_cash, v_status
-    );
-    RAISE NOTICE 'Session %, earned %, status %', v_sid, v_cash, v_status;
-END;
-$$;
-
--- Admin: restock samosas
-CALL sp_restock_cafeteria_item(3, 50);
-
--- Admin: manual wallet top-up
-CALL sp_manual_wallet_adjustment(1, 200.00);
-
--- Query a student's full transaction history
-SELECT * FROM vw_wallet_transaction_history WHERE student_id = 1;
-
--- Check leaderboard
-SELECT * FROM vw_esports_leaderboard ORDER BY game_rank LIMIT 10;
-
-
-
 
 
 -- ============================================================
@@ -1270,9 +1168,7 @@ BEGIN
         v_item_id := v_pair[1];
         v_qty     := v_pair[2];
 
-        -- Create a savepoint before touching this item
-        SAVEPOINT sp_item;
-
+        -- The BEGIN statement here acts as our automatic savepoint
         BEGIN
             SELECT item_name INTO v_item_name
             FROM   Cafeteria_Items
@@ -1296,17 +1192,15 @@ BEGIN
                 (item_id, change_amount, transaction_type)
             VALUES (v_item_id, v_qty, 'RESTOCK');
 
-            -- Success: release the savepoint (it's no longer needed)
-            RELEASE SAVEPOINT sp_item;
+            -- If we reach here, it was successful. 
             v_ok := v_ok + 1;
             RAISE NOTICE '[T2] ✓ Restocked item % ("%") → new stock=%',
                 v_item_id, v_item_name, v_new_stock;
 
         EXCEPTION
             WHEN OTHERS THEN
-                -- Roll back only this item; outer transaction continues
-                ROLLBACK TO SAVEPOINT sp_item;
-                RELEASE   SAVEPOINT sp_item;
+                -- PostgreSQL automatically rolls back the current BEGIN block!
+                -- We just need to log the error and let the loop continue.
                 v_skip := v_skip + 1;
                 RAISE WARNING '[T2] ✗ Skipped item_id=% — %: %',
                     v_item_id, SQLSTATE, SQLERRM;
@@ -1314,7 +1208,6 @@ BEGIN
     END LOOP;
 
     RAISE NOTICE '[T2] Batch complete: % restocked, % skipped.', v_ok, v_skip;
-    -- Outer COMMIT happens implicitly when the DO block exits cleanly
 END;
 $$;
 
@@ -1505,7 +1398,7 @@ ROLLBACK;
 
 
 -- ============================================================
--- SECTION 2 : ADVANCED ANALYTICAL QUERIES
+-- SECTION 2 
 -- ============================================================
 
 -- ─────────────────────────────────────────────────────────────
@@ -1516,493 +1409,550 @@ ROLLBACK;
 --    produce the same constant (the "island group").
 --    RANK() on streak_length reveals the all-time leaders.
 -- ─────────────────────────────────────────────────────────────
-WITH daily_plays AS (
-    -- One row per student per calendar day they played
-    SELECT DISTINCT
-        student_id,
-        played_at::DATE AS play_date
-    FROM  Game_Sessions
-    WHERE status = 'PROCESSED'
-),
-island_groups AS (
-    SELECT
-        student_id,
-        play_date,
-        -- Subtracting a sequential integer from a date groups
-        -- consecutive dates into the same "island" value
-        play_date
-            - (ROW_NUMBER() OVER (
-                PARTITION BY student_id
-                ORDER BY play_date
-              ) * INTERVAL '1 day')::DATE      AS island_key
-    FROM daily_plays
-),
-streaks AS (
-    SELECT
-        student_id,
-        MIN(play_date)  AS streak_start,
-        MAX(play_date)  AS streak_end,
-        COUNT(*)        AS streak_length_days
-    FROM  island_groups
-    GROUP BY student_id, island_key
+CREATE OR REPLACE PROCEDURE proc_batch_restock_items(
+    p_items INT[][] -- Node.js will pass the array here
 )
-SELECT
-    s.roll_number,
-    s.full_name,
-    st.streak_start,
-    st.streak_end,
-    st.streak_length_days,
-    RANK() OVER (ORDER BY st.streak_length_days DESC) AS streak_rank,
-    -- Is the streak still active today?
-    CASE WHEN st.streak_end = CURRENT_DATE THEN 'ACTIVE' ELSE 'ENDED' END AS streak_status
-FROM streaks   st
-JOIN Students   s ON st.student_id = s.student_id
-ORDER BY streak_rank, st.streak_start DESC;
+LANGUAGE plpgsql
+AS $$
+DECLARE
+    v_pair      INT[];
+    v_item_id   INT;
+    v_qty       INT;
+    v_item_name VARCHAR(100);
+    v_new_stock INT;
+    v_ok        INT := 0;
+    v_skip      INT := 0;
+BEGIN
+    -- We loop over the parameter array instead of the hardcoded one
+    FOREACH v_pair SLICE 1 IN ARRAY p_items
+    LOOP
+        v_item_id := v_pair[1];
+        v_qty     := v_pair[2];
+
+        BEGIN
+            SELECT item_name INTO v_item_name
+            FROM   Cafeteria_Items
+            WHERE  item_id = v_item_id
+            FOR UPDATE;
+
+            IF NOT FOUND THEN
+                RAISE EXCEPTION 'ITEM_NOT_FOUND: id=%', v_item_id;
+            END IF;
+
+            IF v_qty <= 0 THEN
+                RAISE EXCEPTION 'INVALID_QTY: must be positive';
+            END IF;
+
+            UPDATE Cafeteria_Items
+            SET    stock_quantity = stock_quantity + v_qty
+            WHERE  item_id = v_item_id
+            RETURNING stock_quantity INTO v_new_stock;
+
+            INSERT INTO Cafeteria_Inventory_Logs
+                (item_id, change_amount, transaction_type)
+            VALUES (v_item_id, v_qty, 'RESTOCK');
+
+            v_ok := v_ok + 1;
+            RAISE NOTICE 'Restocked item % ("%") → new stock=%', v_item_id, v_item_name, v_new_stock;
+
+        EXCEPTION
+            WHEN OTHERS THEN
+                v_skip := v_skip + 1;
+                RAISE WARNING 'Skipped item_id=% — %: %', v_item_id, SQLSTATE, SQLERRM;
+        END;
+    END LOOP;
+
+    RAISE NOTICE 'Batch complete: % restocked, % skipped.', v_ok, v_skip;
+END;
+$$;
 
 
--- ─────────────────────────────────────────────────────────────
--- Q2. ROLLUP — Hierarchical Revenue Cube
---
---  ROLLUP produces subtotals at every level:
---    (source, month) → subtotal per source → grand total
---  NULL in a column signals the rollup aggregation for that level.
--- ─────────────────────────────────────────────────────────────
-SELECT
-    COALESCE(source, 'ALL SOURCES')                         AS source,
-    COALESCE(TO_CHAR(month, 'YYYY-MM'), 'ALL MONTHS')       AS month,
-    SUM(revenue)                                            AS total_revenue,
-    SUM(order_count)                                        AS total_orders,
-    ROUND(SUM(revenue) / NULLIF(SUM(order_count), 0), 2)   AS avg_order_value,
-    -- Distinguish real rows from ROLLUP-generated subtotal rows
-    GROUPING(source)                                        AS is_source_subtotal,
-    GROUPING(month)                                         AS is_month_subtotal
-FROM (
-    SELECT
-        'CAFETERIA'                              AS source,
-        DATE_TRUNC('month', order_timestamp)     AS month,
-        SUM(total_amount)                        AS revenue,
-        COUNT(*)                                 AS order_count
-    FROM Cafeteria_Orders WHERE status = 'COMPLETED'
-    GROUP BY DATE_TRUNC('month', order_timestamp)
-
-    UNION ALL
-
-    SELECT
-        'BOOKSHOP',
-        DATE_TRUNC('month', order_timestamp),
-        SUM(total_amount),
-        COUNT(*)
-    FROM Bookshop_Orders WHERE status = 'COMPLETED'
-    GROUP BY DATE_TRUNC('month', order_timestamp)
-) revenue_base
-GROUP BY ROLLUP(source, month)
-ORDER BY
-    GROUPING(source),
-    GROUPING(month),
-    source,
-    month;
-
-
--- ─────────────────────────────────────────────────────────────
--- Q3. GROUPING SETS — Multi-Dimensional Spend Analysis
---
---  Produces three independent aggregation perspectives in a
---  single pass over the data — far more efficient than three
---  separate GROUP BY queries.
---    Set 1: Total spend by transaction type  (type, -)
---    Set 2: Total spend by month             (-, month)
---    Set 3: Grand total                      (-, -)
--- ─────────────────────────────────────────────────────────────
-SELECT
-    COALESCE(wl.transaction_type, 'GRAND TOTAL')       AS dimension,
-    COALESCE(TO_CHAR(DATE_TRUNC('month',
-        wl.transaction_timestamp), 'YYYY-MM'), '—')    AS month,
-    COUNT(*)                                           AS transactions,
-    ROUND(SUM(ABS(wl.amount)), 2)                      AS total_amount,
-    ROUND(AVG(ABS(wl.amount)), 2)                      AS avg_amount
-FROM Wallet_Ledger wl
-WHERE wl.transaction_type IN ('CAFETERIA_SPEND', 'BOOKSHOP_SPEND')
-GROUP BY GROUPING SETS (
-    (wl.transaction_type),
-    (DATE_TRUNC('month', wl.transaction_timestamp)),
-    ()                                  -- grand total row
+CREATE OR REPLACE FUNCTION fn_get_revenue_cube()
+RETURNS TABLE (
+    source TEXT,
+    month TEXT,
+    total_revenue NUMERIC,
+    total_orders BIGINT,
+    avg_order_value NUMERIC,
+    is_source_subtotal INT,
+    is_month_subtotal INT
 )
-ORDER BY
-    GROUPING(wl.transaction_type),
-    GROUPING(DATE_TRUNC('month', wl.transaction_timestamp)),
-    wl.transaction_type,
-    month;
-
-
--- ─────────────────────────────────────────────────────────────
--- Q4. Cohort Retention Analysis
---
---  Groups students by their registration week (cohort).
---  For each cohort, counts how many students were active
---  in week 0, week 1, week 2 … after joining.
---  This is the standard SaaS retention table, applied to
---  the game-earning behaviour of students.
--- ─────────────────────────────────────────────────────────────
-WITH student_cohorts AS (
-    -- Week a student first appeared in the wallet (proxy for join date)
+LANGUAGE plpgsql
+AS $$
+BEGIN
+    RETURN QUERY
     SELECT
-        student_id,
-        DATE_TRUNC('week', MIN(transaction_timestamp)) AS cohort_week
-    FROM Wallet_Ledger
-    GROUP BY student_id
-),
-student_activity AS (
-    SELECT DISTINCT
-        wl.student_id,
-        DATE_TRUNC('week', wl.transaction_timestamp) AS activity_week
+        COALESCE(revenue_base.source, 'ALL SOURCES')::TEXT,
+        COALESCE(TO_CHAR(revenue_base.month, 'YYYY-MM'), 'ALL MONTHS')::TEXT,
+        SUM(revenue_base.revenue),
+        SUM(revenue_base.order_count),
+        ROUND(SUM(revenue_base.revenue) / NULLIF(SUM(revenue_base.order_count), 0), 2),
+        GROUPING(revenue_base.source),
+        GROUPING(revenue_base.month)
+    FROM (
+        SELECT
+            'CAFETERIA'                              AS source,
+            DATE_TRUNC('month', order_timestamp)     AS month,
+            SUM(total_amount)                        AS revenue,
+            COUNT(*)                                 AS order_count
+        FROM Cafeteria_Orders WHERE status = 'COMPLETED'
+        GROUP BY DATE_TRUNC('month', order_timestamp)
+        UNION ALL
+        SELECT
+            'BOOKSHOP',
+            DATE_TRUNC('month', order_timestamp),
+            SUM(total_amount),
+            COUNT(*)
+        FROM Bookshop_Orders WHERE status = 'COMPLETED'
+        GROUP BY DATE_TRUNC('month', order_timestamp)
+    ) revenue_base
+    GROUP BY ROLLUP(revenue_base.source, revenue_base.month)
+    ORDER BY
+        GROUPING(revenue_base.source),
+        GROUPING(revenue_base.month),
+        revenue_base.source,
+        revenue_base.month;
+END;
+$$;
+
+
+CREATE OR REPLACE FUNCTION fn_get_spend_analysis()
+RETURNS TABLE (
+    dimension TEXT,
+    month TEXT,
+    transactions BIGINT,
+    total_amount NUMERIC,
+    avg_amount NUMERIC
+)
+LANGUAGE plpgsql
+AS $$
+BEGIN
+    RETURN QUERY
+    SELECT
+        COALESCE(wl.transaction_type, 'GRAND TOTAL')::TEXT,
+        COALESCE(TO_CHAR(DATE_TRUNC('month', wl.transaction_timestamp), 'YYYY-MM'), '—')::TEXT,
+        COUNT(*),
+        ROUND(SUM(ABS(wl.amount)), 2),
+        ROUND(AVG(ABS(wl.amount)), 2)
     FROM Wallet_Ledger wl
-    WHERE wl.transaction_type = 'GAME_EARNING'
-),
-cohort_activity AS (
-    SELECT
-        sc.cohort_week,
-        (sa.activity_week - sc.cohort_week) / 7          AS weeks_since_join,
-        COUNT(DISTINCT sa.student_id)                     AS active_students
-    FROM student_cohorts  sc
-    JOIN student_activity sa ON sc.student_id = sa.student_id
-    GROUP BY sc.cohort_week, weeks_since_join
-),
-cohort_sizes AS (
-    SELECT cohort_week, COUNT(*) AS cohort_size
-    FROM   student_cohorts
-    GROUP BY cohort_week
+    WHERE wl.transaction_type IN ('CAFETERIA_SPEND', 'BOOKSHOP_SPEND')
+    GROUP BY GROUPING SETS (
+        (wl.transaction_type),
+        (DATE_TRUNC('month', wl.transaction_timestamp)),
+        ()
+    )
+    ORDER BY
+        GROUPING(wl.transaction_type),
+        GROUPING(DATE_TRUNC('month', wl.transaction_timestamp)),
+        wl.transaction_type,
+        month;
+END;
+$$;
+
+CREATE OR REPLACE FUNCTION fn_get_cohort_retention()
+RETURNS TABLE (
+    cohort_week TEXT,
+    cohort_size BIGINT,
+    weeks_since_join INT,
+    active_students BIGINT,
+    retention_pct NUMERIC
 )
-SELECT
-    TO_CHAR(ca.cohort_week, 'YYYY-MM-DD')               AS cohort_week,
-    cs.cohort_size,
-    ca.weeks_since_join,
-    ca.active_students,
-    ROUND(ca.active_students::NUMERIC / cs.cohort_size * 100, 1) AS retention_pct
-FROM cohort_activity ca
-JOIN cohort_sizes    cs ON ca.cohort_week = cs.cohort_week
-ORDER BY ca.cohort_week, ca.weeks_since_join;
-
-
--- ─────────────────────────────────────────────────────────────
--- Q5. LATERAL JOIN — Most Recent Order per Student
---
---  LATERAL allows the subquery to reference the outer row.
---  Here it efficiently fetches exactly one (most recent)
---  cafeteria order per student without a correlated subquery
---  or window function overhead on the full table.
--- ─────────────────────────────────────────────────────────────
-SELECT
-    s.roll_number,
-    s.full_name,
-    s.current_balance,
-    last_caf.order_id          AS last_cafeteria_order_id,
-    last_caf.total_amount      AS last_cafeteria_spend,
-    last_caf.order_timestamp   AS last_cafeteria_date,
-    last_bs.receipt_number     AS last_bookshop_receipt,
-    last_bs.total_amount       AS last_bookshop_spend,
-    last_bs.order_timestamp    AS last_bookshop_date
-FROM Students s
-
-LEFT JOIN LATERAL (
-    SELECT order_id, total_amount, order_timestamp
-    FROM   Cafeteria_Orders
-    WHERE  student_id = s.student_id
-      AND  status = 'COMPLETED'
-    ORDER BY order_timestamp DESC
-    LIMIT 1
-) last_caf ON TRUE
-
-LEFT JOIN LATERAL (
-    SELECT receipt_number, total_amount, order_timestamp
-    FROM   Bookshop_Orders
-    WHERE  student_id = s.student_id
-      AND  status = 'COMPLETED'
-    ORDER BY order_timestamp DESC
-    LIMIT 1
-) last_bs ON TRUE
-
-ORDER BY s.roll_number;
-
-
--- ─────────────────────────────────────────────────────────────
--- Q6. Score Percentiles per Game
---     PERCENTILE_CONT (continuous / interpolated)
---     Shows P50, P75, P90, P99 — useful for difficulty tuning
---     and fair leaderboard cutoffs.
--- ─────────────────────────────────────────────────────────────
-SELECT
-    eg.game_name,
-    COUNT(gs.session_id)                                                AS total_sessions,
-    MIN(gs.raw_score)                                                   AS min_score,
-    ROUND(AVG(gs.raw_score), 0)                                        AS mean_score,
-    PERCENTILE_CONT(0.50) WITHIN GROUP (ORDER BY gs.raw_score)::INT    AS p50_median,
-    PERCENTILE_CONT(0.75) WITHIN GROUP (ORDER BY gs.raw_score)::INT    AS p75,
-    PERCENTILE_CONT(0.90) WITHIN GROUP (ORDER BY gs.raw_score)::INT    AS p90,
-    PERCENTILE_CONT(0.99) WITHIN GROUP (ORDER BY gs.raw_score)::INT    AS p99,
-    MAX(gs.raw_score)                                                   AS max_score,
-    -- Coefficient of variation: how spread out are scores?
-    ROUND(STDDEV(gs.raw_score) / NULLIF(AVG(gs.raw_score), 0) * 100, 1) AS score_cv_pct
-FROM Game_Sessions  gs
-JOIN E_Sports_Games eg ON gs.game_id = eg.game_id
-WHERE gs.status = 'PROCESSED'
-GROUP BY eg.game_id, eg.game_name
-ORDER BY eg.game_name;
-
-
--- ─────────────────────────────────────────────────────────────
--- Q7. FILTER Clause — Conditional Multi-Metric Aggregation
---
---  The FILTER clause is cleaner and faster than CASE WHEN
---  inside aggregate functions. Produces a rich pivot-style
---  summary in a single scan of Wallet_Ledger.
--- ─────────────────────────────────────────────────────────────
-SELECT
-    s.roll_number,
-    s.full_name,
-    s.current_balance,
-
-    -- Earnings
-    COUNT(*)  FILTER (WHERE wl.transaction_type = 'GAME_EARNING')         AS game_txn_count,
-    SUM(wl.amount) FILTER (WHERE wl.transaction_type = 'GAME_EARNING')    AS total_earned,
-
-    -- Cafeteria
-    COUNT(*)  FILTER (WHERE wl.transaction_type = 'CAFETERIA_SPEND')      AS caf_txn_count,
-    SUM(ABS(wl.amount)) FILTER (WHERE wl.transaction_type = 'CAFETERIA_SPEND') AS caf_total_spend,
-
-    -- Bookshop
-    COUNT(*)  FILTER (WHERE wl.transaction_type = 'BOOKSHOP_SPEND')       AS bs_txn_count,
-    SUM(ABS(wl.amount)) FILTER (WHERE wl.transaction_type = 'BOOKSHOP_SPEND')  AS bs_total_spend,
-
-    -- Spend vs. Earn ratio (1.0 = broke even, >1 = spending more than earning)
-    ROUND(
-        COALESCE(SUM(ABS(wl.amount)) FILTER (WHERE wl.amount < 0), 0)
-        /
-        NULLIF(SUM(wl.amount) FILTER (WHERE wl.amount > 0), 0),
-    2)                                                                     AS spend_to_earn_ratio,
-
-    -- Last activity timestamp
-    MAX(wl.transaction_timestamp)                                          AS last_active_at
-
-FROM Students      s
-LEFT JOIN Wallet_Ledger wl ON s.student_id = wl.student_id
-GROUP BY s.student_id, s.roll_number, s.full_name, s.current_balance
-ORDER BY total_earned DESC NULLS LAST;
-
-
--- ─────────────────────────────────────────────────────────────
--- Q8. Top-3 Items per Cafeteria Category  (Top-N per Group)
---
---  Uses DENSE_RANK() partitioned by category so each category
---  independently shows its top 3 sellers by revenue.
--- ─────────────────────────────────────────────────────────────
-WITH ranked_items AS (
+LANGUAGE plpgsql
+AS $$
+BEGIN
+    RETURN QUERY
+    WITH student_cohorts AS (
+        SELECT
+            student_id,
+            DATE_TRUNC('week', MIN(transaction_timestamp)) AS cohort_week
+        FROM Wallet_Ledger
+        GROUP BY student_id
+    ),
+    student_activity AS (
+        SELECT DISTINCT
+            wl.student_id,
+            DATE_TRUNC('week', wl.transaction_timestamp) AS activity_week
+        FROM Wallet_Ledger wl
+        WHERE wl.transaction_type = 'GAME_EARNING'
+    ),
+    cohort_activity AS (
+        SELECT
+            sc.cohort_week,
+            EXTRACT(DAY FROM (sa.activity_week - sc.cohort_week))::INT / 7 AS weeks_since_join,
+            COUNT(DISTINCT sa.student_id) AS active_students
+        FROM student_cohorts sc
+        JOIN student_activity sa ON sc.student_id = sa.student_id
+        GROUP BY sc.cohort_week, weeks_since_join
+    ),
+    cohort_sizes AS (
+        SELECT sc.cohort_week, COUNT(*) AS cohort_size
+        FROM student_cohorts sc
+        GROUP BY sc.cohort_week
+    )
     SELECT
-        ci.category,
-        ci.item_name,
-        ci.price                                                        AS current_price,
-        SUM(cod.quantity_purchased)                                     AS units_sold,
-        SUM(cod.quantity_purchased * cod.unit_price_at_purchase)        AS revenue,
-        DENSE_RANK() OVER (
-            PARTITION BY ci.category
-            ORDER BY SUM(cod.quantity_purchased * cod.unit_price_at_purchase) DESC
-        )                                                               AS category_revenue_rank
-    FROM  Cafeteria_Items        ci
-    JOIN  Cafeteria_Order_Details cod ON ci.item_id   = cod.item_id
-    JOIN  Cafeteria_Orders        co  ON cod.order_id = co.order_id
-                                     AND co.status = 'COMPLETED'
-    GROUP BY ci.item_id, ci.category, ci.item_name, ci.price
+        TO_CHAR(ca.cohort_week, 'YYYY-MM-DD')::TEXT,
+        cs.cohort_size,
+        ca.weeks_since_join,
+        ca.active_students,
+        ROUND(ca.active_students::NUMERIC / cs.cohort_size * 100, 1)
+    FROM cohort_activity ca
+    JOIN cohort_sizes cs ON ca.cohort_week = cs.cohort_week
+    ORDER BY ca.cohort_week, ca.weeks_since_join;
+END;
+$$;
+
+
+CREATE OR REPLACE FUNCTION fn_get_student_recent_orders()
+RETURNS TABLE (
+    roll_number VARCHAR,
+    full_name VARCHAR,
+    current_balance NUMERIC,
+    last_cafeteria_order_id INT,
+    last_cafeteria_spend NUMERIC,
+    last_cafeteria_date TIMESTAMP,
+    last_bookshop_receipt VARCHAR,
+    last_bookshop_spend NUMERIC,
+    last_bookshop_date TIMESTAMP
 )
-SELECT
-    category,
-    category_revenue_rank,
-    item_name,
-    current_price,
-    units_sold,
-    ROUND(revenue, 2)     AS revenue
-FROM  ranked_items
-WHERE category_revenue_rank <= 3
-ORDER BY category, category_revenue_rank;
-
-
--- ─────────────────────────────────────────────────────────────
--- Q9. Student RFM Segmentation
---     (Recency · Frequency · Monetary)
---
---  Classic marketing model applied to student wallet data.
---    R = days since last transaction (lower = better)
---    F = total number of transactions
---    M = total amount spent
---
---  NTILE(4) splits students into quartiles for each dimension.
---  Combined RFM score (1=worst 4=best per dimension) segments
---  students into actionable tiers.
--- ─────────────────────────────────────────────────────────────
-WITH rfm_raw AS (
+LANGUAGE plpgsql
+AS $$
+BEGIN
+    RETURN QUERY
     SELECT
-        s.student_id,
         s.roll_number,
         s.full_name,
-        CURRENT_DATE - MAX(wl.transaction_timestamp)::DATE              AS recency_days,
-        COUNT(*)                                                         AS frequency,
-        SUM(ABS(wl.amount)) FILTER (WHERE wl.amount < 0)                AS monetary_spend
-    FROM Students      s
+        s.current_balance,
+        last_caf.order_id,
+        last_caf.total_amount,
+        last_caf.order_timestamp,
+        last_bs.receipt_number,
+        last_bs.total_amount,
+        last_bs.order_timestamp
+    FROM Students s
+    LEFT JOIN LATERAL (
+        SELECT order_id, total_amount, order_timestamp
+        FROM Cafeteria_Orders
+        WHERE student_id = s.student_id AND status = 'COMPLETED'
+        ORDER BY order_timestamp DESC LIMIT 1
+    ) last_caf ON TRUE
+    LEFT JOIN LATERAL (
+        SELECT receipt_number, total_amount, order_timestamp
+        FROM Bookshop_Orders
+        WHERE student_id = s.student_id AND status = 'COMPLETED'
+        ORDER BY order_timestamp DESC LIMIT 1
+    ) last_bs ON TRUE
+    ORDER BY s.roll_number;
+END;
+$$;
+
+CREATE OR REPLACE FUNCTION fn_get_game_score_percentiles()
+RETURNS TABLE (
+    game_name VARCHAR,
+    total_sessions BIGINT,
+    min_score INT,
+    mean_score NUMERIC,
+    p50_median INT,
+    p75 INT,
+    p90 INT,
+    p99 INT,
+    max_score INT,
+    score_cv_pct NUMERIC
+)
+LANGUAGE plpgsql
+AS $$
+BEGIN
+    RETURN QUERY
+    SELECT
+        eg.game_name,
+        COUNT(gs.session_id),
+        MIN(gs.raw_score),
+        ROUND(AVG(gs.raw_score), 0),
+        PERCENTILE_CONT(0.50) WITHIN GROUP (ORDER BY gs.raw_score)::INT,
+        PERCENTILE_CONT(0.75) WITHIN GROUP (ORDER BY gs.raw_score)::INT,
+        PERCENTILE_CONT(0.90) WITHIN GROUP (ORDER BY gs.raw_score)::INT,
+        PERCENTILE_CONT(0.99) WITHIN GROUP (ORDER BY gs.raw_score)::INT,
+        MAX(gs.raw_score),
+        ROUND((STDDEV(gs.raw_score) / NULLIF(AVG(gs.raw_score), 0))::NUMERIC * 100, 1)
+    FROM Game_Sessions gs
+    JOIN E_Sports_Games eg ON gs.game_id = eg.game_id
+    WHERE gs.status = 'PROCESSED'
+    GROUP BY eg.game_id, eg.game_name
+    ORDER BY eg.game_name;
+END;
+$$;
+
+CREATE OR REPLACE FUNCTION fn_get_student_metrics()
+RETURNS TABLE (
+    roll_number VARCHAR,
+    full_name VARCHAR,
+    current_balance NUMERIC,
+    game_txn_count BIGINT,
+    total_earned NUMERIC,
+    caf_txn_count BIGINT,
+    caf_total_spend NUMERIC,
+    bs_txn_count BIGINT,
+    bs_total_spend NUMERIC,
+    spend_to_earn_ratio NUMERIC,
+    last_active_at TIMESTAMP
+)
+LANGUAGE plpgsql
+AS $$
+BEGIN
+    RETURN QUERY
+    SELECT
+        s.roll_number,
+        s.full_name,
+        s.current_balance,
+        COUNT(*) FILTER (WHERE wl.transaction_type = 'GAME_EARNING'),
+        COALESCE(SUM(wl.amount) FILTER (WHERE wl.transaction_type = 'GAME_EARNING'), 0),
+        COUNT(*) FILTER (WHERE wl.transaction_type = 'CAFETERIA_SPEND'),
+        COALESCE(SUM(ABS(wl.amount)) FILTER (WHERE wl.transaction_type = 'CAFETERIA_SPEND'), 0),
+        COUNT(*) FILTER (WHERE wl.transaction_type = 'BOOKSHOP_SPEND'),
+        COALESCE(SUM(ABS(wl.amount)) FILTER (WHERE wl.transaction_type = 'BOOKSHOP_SPEND'), 0),
+        ROUND(
+            COALESCE(SUM(ABS(wl.amount)) FILTER (WHERE wl.amount < 0), 0) /
+            NULLIF(SUM(wl.amount) FILTER (WHERE wl.amount > 0), 0), 2
+        ),
+        MAX(wl.transaction_timestamp)
+    FROM Students s
     LEFT JOIN Wallet_Ledger wl ON s.student_id = wl.student_id
-                               AND wl.transaction_type IN ('CAFETERIA_SPEND','BOOKSHOP_SPEND')
-    GROUP BY s.student_id, s.roll_number, s.full_name
-),
-rfm_scored AS (
-    SELECT *,
-        -- Lower recency = more recent = better → invert with 5 - NTILE
-        5 - NTILE(4) OVER (ORDER BY recency_days DESC)  AS r_score,
-        NTILE(4)     OVER (ORDER BY frequency    ASC)   AS f_score,
-        NTILE(4)     OVER (ORDER BY monetary_spend ASC) AS m_score
-    FROM rfm_raw
+    GROUP BY s.student_id, s.roll_number, s.full_name, s.current_balance
+    ORDER BY total_earned DESC NULLS LAST;
+END;
+$$;
+
+
+CREATE OR REPLACE FUNCTION fn_get_top_cafeteria_items()
+RETURNS TABLE (
+    category VARCHAR,
+    category_revenue_rank BIGINT,
+    item_name VARCHAR,
+    current_price NUMERIC,
+    units_sold BIGINT,
+    revenue NUMERIC
 )
-SELECT
-    roll_number,
-    full_name,
-    recency_days,
-    frequency,
-    ROUND(COALESCE(monetary_spend, 0), 2)          AS total_spend,
-    r_score,
-    f_score,
-    m_score,
-    (r_score + f_score + m_score)                  AS rfm_total,
-    CASE
-        WHEN (r_score + f_score + m_score) >= 10 THEN 'CHAMPION'
-        WHEN (r_score + f_score + m_score) >=  7 THEN 'LOYAL'
-        WHEN (r_score + f_score + m_score) >=  5 THEN 'POTENTIAL'
-        WHEN r_score >= 3                         THEN 'NEW / RETURNING'
-        ELSE                                           'AT RISK'
-    END AS segment
-FROM rfm_scored
-ORDER BY rfm_total DESC;
+LANGUAGE plpgsql
+AS $$
+BEGIN
+    RETURN QUERY
+    WITH ranked_items AS (
+        SELECT
+            ci.category,
+            ci.item_name,
+            ci.price AS current_price,
+            SUM(cod.quantity_purchased) AS units_sold,
+            SUM(cod.quantity_purchased * cod.unit_price_at_purchase) AS rev,
+            DENSE_RANK() OVER (
+                PARTITION BY ci.category
+                ORDER BY SUM(cod.quantity_purchased * cod.unit_price_at_purchase) DESC
+            ) AS rank
+        FROM Cafeteria_Items ci
+        JOIN Cafeteria_Order_Details cod ON ci.item_id = cod.item_id
+        JOIN Cafeteria_Orders co ON cod.order_id = co.order_id AND co.status = 'COMPLETED'
+        GROUP BY ci.item_id, ci.category, ci.item_name, ci.price
+    )
+    SELECT r.category, r.rank, r.item_name, r.current_price, r.units_sold, ROUND(r.rev, 2)
+    FROM ranked_items r
+    WHERE r.rank <= 3
+    ORDER BY r.category, r.rank;
+END;
+$$;
 
-
--- ─────────────────────────────────────────────────────────────
--- Q10. Zero-Activity Days  (Date-Series Gap Analysis)
---
---  Generates a complete calendar between the first and last
---  order date, then LEFT JOINs actual orders to expose every
---  day the cafeteria had zero transactions.
---  Requires: generate_series() (built into PostgreSQL).
--- ─────────────────────────────────────────────────────────────
-WITH date_spine AS (
-    SELECT generate_series(
-        (SELECT MIN(order_timestamp)::DATE FROM Cafeteria_Orders),
-        CURRENT_DATE,
-        INTERVAL '1 day'
-    )::DATE AS calendar_date
-),
-daily_orders AS (
+CREATE OR REPLACE FUNCTION fn_get_student_rfm()
+RETURNS TABLE (
+    roll_number VARCHAR,
+    full_name VARCHAR,
+    recency_days INT,
+    frequency BIGINT,
+    total_spend NUMERIC,
+    r_score INT,
+    f_score INT,
+    m_score INT,
+    rfm_total INT,
+    segment TEXT
+)
+LANGUAGE plpgsql
+AS $$
+BEGIN
+    RETURN QUERY
+    WITH rfm_raw AS (
+        SELECT
+            s.student_id,
+            s.roll_number,
+            s.full_name,
+            (CURRENT_DATE - MAX(wl.transaction_timestamp)::DATE)::INT AS recency_days,
+            COUNT(*) AS frequency,
+            SUM(ABS(wl.amount)) FILTER (WHERE wl.amount < 0) AS monetary_spend
+        FROM Students s
+        LEFT JOIN Wallet_Ledger wl ON s.student_id = wl.student_id AND wl.transaction_type IN ('CAFETERIA_SPEND','BOOKSHOP_SPEND')
+        GROUP BY s.student_id, s.roll_number, s.full_name
+    ),
+    rfm_scored AS (
+        SELECT *,
+            (5 - NTILE(4) OVER (ORDER BY recency_days DESC))::INT AS r,
+            NTILE(4) OVER (ORDER BY frequency ASC)::INT AS f,
+            NTILE(4) OVER (ORDER BY monetary_spend ASC)::INT AS m
+        FROM rfm_raw
+    )
     SELECT
-        order_timestamp::DATE   AS order_date,
-        COUNT(*)                AS order_count,
-        SUM(total_amount)       AS daily_revenue
-    FROM  Cafeteria_Orders
-    WHERE status = 'COMPLETED'
-    GROUP BY order_timestamp::DATE
+        rs.roll_number,
+        rs.full_name,
+        rs.recency_days,
+        rs.frequency,
+        ROUND(COALESCE(rs.monetary_spend, 0), 2),
+        rs.r, rs.f, rs.m,
+        (rs.r + rs.f + rs.m),
+        CASE
+            WHEN (rs.r + rs.f + rs.m) >= 10 THEN 'CHAMPION'::TEXT
+            WHEN (rs.r + rs.f + rs.m) >= 7 THEN 'LOYAL'::TEXT
+            WHEN (rs.r + rs.f + rs.m) >= 5 THEN 'POTENTIAL'::TEXT
+            WHEN rs.r >= 3 THEN 'NEW / RETURNING'::TEXT
+            ELSE 'AT RISK'::TEXT
+        END
+    FROM rfm_scored rs
+    ORDER BY (rs.r + rs.f + rs.m) DESC;
+END;
+$$;
+
+
+CREATE OR REPLACE FUNCTION fn_get_zero_activity_days()
+RETURNS TABLE (
+    calendar_date DATE,
+    order_count BIGINT,
+    daily_revenue NUMERIC,
+    activity_level TEXT
 )
-SELECT
-    ds.calendar_date,
-    COALESCE(do_.order_count,    0) AS order_count,
-    COALESCE(do_.daily_revenue,  0) AS daily_revenue,
-    CASE
-        WHEN do_.order_date IS NULL THEN 'ZERO ACTIVITY'
-        WHEN do_.order_count < 5   THEN 'LOW'
-        WHEN do_.order_count < 20  THEN 'MODERATE'
-        ELSE                            'HIGH'
-    END AS activity_level
-FROM date_spine          ds
-LEFT JOIN daily_orders   do_ ON ds.calendar_date = do_.order_date
-ORDER BY ds.calendar_date;
-
-
--- ─────────────────────────────────────────────────────────────
--- Q11. Point-in-Time Wallet Balance Reconstruction
---
---  For any given student, reconstructs their balance at every
---  moment in time by running a cumulative sum over the ledger.
---  This is the "account statement" view used in fintech systems.
--- ─────────────────────────────────────────────────────────────
-WITH ordered_ledger AS (
+LANGUAGE plpgsql
+AS $$
+BEGIN
+    RETURN QUERY
+    WITH date_spine AS (
+        SELECT generate_series(
+            (SELECT MIN(order_timestamp)::DATE FROM Cafeteria_Orders),
+            CURRENT_DATE,
+            INTERVAL '1 day'
+        )::DATE AS cal_date
+    ),
+    daily_orders AS (
+        SELECT
+            order_timestamp::DATE AS order_date,
+            COUNT(*) AS o_count,
+            SUM(total_amount) AS daily_rev
+        FROM Cafeteria_Orders
+        WHERE status = 'COMPLETED'
+        GROUP BY order_timestamp::DATE
+    )
     SELECT
-        wl.transaction_id,
-        wl.transaction_type,
-        wl.amount,
-        wl.transaction_timestamp,
-        -- Balance after each transaction
-        SUM(wl.amount) OVER (
-            PARTITION BY wl.student_id
-            ORDER BY wl.transaction_timestamp, wl.transaction_id
-            ROWS BETWEEN UNBOUNDED PRECEDING AND CURRENT ROW
-        )  AS running_balance,
-        -- Previous balance (for display in bank-statement style)
-        LAG(SUM(wl.amount) OVER (
-            PARTITION BY wl.student_id
-            ORDER BY wl.transaction_timestamp, wl.transaction_id
-            ROWS BETWEEN UNBOUNDED PRECEDING AND CURRENT ROW
-        )) OVER (
-            PARTITION BY wl.student_id
-            ORDER BY wl.transaction_timestamp, wl.transaction_id
-        )  AS balance_before
-    FROM Wallet_Ledger wl
-    WHERE wl.student_id = 1  -- ← parameterise for your API
+        ds.cal_date,
+        COALESCE(do_.o_count, 0),
+        COALESCE(do_.daily_rev, 0),
+        CASE
+            WHEN do_.order_date IS NULL THEN 'ZERO ACTIVITY'::TEXT
+            WHEN do_.o_count < 5 THEN 'LOW'::TEXT
+            WHEN do_.o_count < 20 THEN 'MODERATE'::TEXT
+            ELSE 'HIGH'::TEXT
+        END
+    FROM date_spine ds
+    LEFT JOIN daily_orders do_ ON ds.cal_date = do_.order_date
+    ORDER BY ds.cal_date;
+END;
+$$;
+
+CREATE OR REPLACE FUNCTION fn_get_wallet_statement(p_student_id INT)
+RETURNS TABLE (
+    transaction_id INT,
+    transaction_timestamp TIMESTAMP,
+    transaction_type VARCHAR,
+    credit NUMERIC,
+    debit NUMERIC,
+    balance_before NUMERIC,
+    balance_after NUMERIC
 )
-SELECT
-    transaction_id,
-    transaction_timestamp,
-    transaction_type,
-    CASE WHEN amount > 0 THEN amount  ELSE NULL END  AS credit,
-    CASE WHEN amount < 0 THEN ABS(amount) ELSE NULL END AS debit,
-    COALESCE(balance_before, 0)                       AS balance_before,
-    running_balance                                   AS balance_after
-FROM ordered_ledger
-ORDER BY transaction_timestamp, transaction_id;
+LANGUAGE plpgsql
+AS $$
+BEGIN
+    RETURN QUERY
+    WITH ordered_ledger AS (
+        SELECT
+            wl.transaction_id,
+            wl.transaction_type,
+            wl.amount,
+            wl.transaction_timestamp,
+            SUM(wl.amount) OVER (
+                PARTITION BY wl.student_id
+                ORDER BY wl.transaction_timestamp, wl.transaction_id
+                ROWS BETWEEN UNBOUNDED PRECEDING AND CURRENT ROW
+            ) AS running_balance,
+            LAG(SUM(wl.amount) OVER (
+                PARTITION BY wl.student_id
+                ORDER BY wl.transaction_timestamp, wl.transaction_id
+                ROWS BETWEEN UNBOUNDED PRECEDING AND CURRENT ROW
+            )) OVER (
+                PARTITION BY wl.student_id
+                ORDER BY wl.transaction_timestamp, wl.transaction_id
+            ) AS bal_before
+        FROM Wallet_Ledger wl
+        WHERE wl.student_id = p_student_id
+    )
+    SELECT
+        ol.transaction_id,
+        ol.transaction_timestamp,
+        ol.transaction_type,
+        CASE WHEN ol.amount > 0 THEN ol.amount ELSE NULL END,
+        CASE WHEN ol.amount < 0 THEN ABS(ol.amount) ELSE NULL END,
+        COALESCE(ol.bal_before, 0),
+        ol.running_balance
+    FROM ordered_ledger ol
+    ORDER BY ol.transaction_timestamp, ol.transaction_id;
+END;
+$$;
 
 
--- ─────────────────────────────────────────────────────────────
--- Q12. Session Heatmap  (Student × Game × Hour-of-Day)
---
---  Reveals when each student plays each game.
---  A frontend can render this as a colour-coded heatmap.
--- ─────────────────────────────────────────────────────────────
-SELECT
-    s.roll_number,
-    eg.game_name,
-    EXTRACT(HOUR FROM gs.played_at)::INT                AS hour_of_day,
-    EXTRACT(DOW  FROM gs.played_at)::INT                AS day_of_week,  -- 0=Sun
-    TO_CHAR(gs.played_at, 'Day')                        AS day_name,
-    COUNT(*)                                            AS session_count,
-    SUM(gs.cash_earned)                                 AS total_earned,
-    ROUND(AVG(gs.raw_score), 0)                         AS avg_score,
-    -- Proportion of this student-game's total sessions in this slot
-    ROUND(
-        COUNT(*)::NUMERIC
-        / SUM(COUNT(*)) OVER (PARTITION BY gs.student_id, gs.game_id)
-        * 100, 1
-    )                                                   AS pct_of_student_game_sessions
-FROM Game_Sessions  gs
-JOIN Students        s  ON gs.student_id = s.student_id
-JOIN E_Sports_Games  eg ON gs.game_id    = eg.game_id
-WHERE gs.status = 'PROCESSED'
-GROUP BY
-    s.student_id, s.roll_number,
-    eg.game_id,   eg.game_name,
-    EXTRACT(HOUR FROM gs.played_at),
-    EXTRACT(DOW  FROM gs.played_at),
-    TO_CHAR(gs.played_at, 'Day')
-ORDER BY s.roll_number, eg.game_name, day_of_week, hour_of_day;
-
-
-
+CREATE OR REPLACE FUNCTION fn_get_session_heatmap()
+RETURNS TABLE (
+    roll_number VARCHAR,
+    game_name VARCHAR,
+    hour_of_day INT,
+    day_of_week INT,
+    day_name TEXT,
+    session_count BIGINT,
+    total_earned NUMERIC,
+    avg_score NUMERIC,
+    pct_of_student_game_sessions NUMERIC
+)
+LANGUAGE plpgsql
+AS $$
+BEGIN
+    RETURN QUERY
+    SELECT
+        s.roll_number,
+        eg.game_name,
+        EXTRACT(HOUR FROM gs.played_at)::INT,
+        EXTRACT(DOW FROM gs.played_at)::INT,
+        TO_CHAR(gs.played_at, 'Day')::TEXT,
+        COUNT(*),
+        SUM(gs.cash_earned),
+        ROUND(AVG(gs.raw_score), 0),
+        ROUND((COUNT(*)::NUMERIC / SUM(COUNT(*)) OVER (PARTITION BY gs.student_id, gs.game_id)) * 100, 1)
+    FROM Game_Sessions gs
+    JOIN Students s ON gs.student_id = s.student_id
+    JOIN E_Sports_Games eg ON gs.game_id = eg.game_id
+    WHERE gs.status = 'PROCESSED'
+    GROUP BY
+        s.student_id, s.roll_number,
+        eg.game_id, eg.game_name,
+        EXTRACT(HOUR FROM gs.played_at),
+        EXTRACT(DOW FROM gs.played_at),
+        TO_CHAR(gs.played_at, 'Day')
+    ORDER BY s.roll_number, eg.game_name, EXTRACT(DOW FROM gs.played_at)::INT, EXTRACT(HOUR FROM gs.played_at)::INT;
+END;
+$$;
 
 
 
 
 -- ================================================================
 --  FAST-INFINITY  |  Seed / Mock Data
---  Run order: 1_ddl.sql → 2_db_layer.sql → 3_transactions.sql → THIS
 --
 --  10 Students · 10 Cafeteria Items · 8 Bookshop Items · 4 Games
 --  20 Game Sessions (1 fraud-flagged) · 15 Cafeteria Orders
@@ -2034,7 +1984,7 @@ BEGIN;
 --  Hamza Qureshi :  5000 + 800 + 640 + 540 - 400 - 2850      = 3730  (3-day streak)
 --  Zara Hussain  :  1500 + 200 + 360 - 400 - 200             = 1460
 INSERT INTO Students (student_id, roll_number, password_hash, full_name, current_balance) VALUES
-( 1, '23L-0001', '$2b$12$Ali.HashedPwd.MockOnly.000001', 'Ali Hassan',      1570.00),
+( 11, '23L-0001', '$2b$12$Ali.HashedPwd.MockOnly.000001', 'Ali Hassan',      1570.00),
 ( 2, '23L-0002', '$2b$12$Fat.HashedPwd.MockOnly.000002', 'Fatima Malik',     265.00),
 ( 3, '23L-0003', '$2b$12$Oma.HashedPwd.MockOnly.000003', 'Omar Sheikh',      600.00),
 ( 4, '23L-0004', '$2b$12$Aye.HashedPwd.MockOnly.000004', 'Ayesha Khan',      880.00),
@@ -2517,15 +2467,310 @@ WITH daily_plays AS (
 ),
 island_groups AS (
     SELECT student_id, play_date,
-           play_date - (ROW_NUMBER() OVER (PARTITION BY student_id ORDER BY play_date)
-                       * INTERVAL '1 day')::DATE AS island_key
+           -- FIX: Wrap the entire math operation in parentheses before casting to DATE
+           (play_date - (ROW_NUMBER() OVER (PARTITION BY student_id ORDER BY play_date) * INTERVAL '1 day'))::DATE AS island_key
     FROM daily_plays
 ),
 streaks AS (
     SELECT student_id, MIN(play_date) AS streak_start, MAX(play_date) AS streak_end,
            COUNT(*) AS streak_length_days
-    FROM island_groups GROUP BY student_id, island_key
+    FROM island_groups 
+    GROUP BY student_id, island_key
 )
 SELECT s.roll_number, s.full_name, st.streak_start, st.streak_end, st.streak_length_days
-FROM streaks st JOIN Students s ON st.student_id = s.student_id
+FROM streaks st 
+JOIN Students s ON st.student_id = s.student_id
 ORDER BY streak_length_days DESC;
+
+
+
+--------------------------------------------------------------------
+
+-------------------run this later ----------------
+-- ============================================================
+-- SECTION 5 : COMPLEX ANALYTICAL QUERIES
+-- (Ready to drop into reports, admin dashboards, or APIs)
+-- ============================================================
+
+-- ─────────────────────────────────────────────────────────────
+-- 5A. Student 30-Day Spending Breakdown
+--     Per student, per transaction type with running totals.
+-- ─────────────────────────────────────────────────────────────
+SELECT
+    s.roll_number,
+    s.full_name,
+    wl.transaction_type,
+    COUNT(*)                                            AS transaction_count,
+    SUM(ABS(wl.amount))                                 AS total_spent,
+    ROUND(AVG(ABS(wl.amount)), 2)                       AS avg_per_transaction,
+    -- Running cumulative spend per student across types
+    SUM(SUM(ABS(wl.amount))) OVER (
+        PARTITION BY s.student_id
+        ORDER BY wl.transaction_type
+        ROWS BETWEEN UNBOUNDED PRECEDING AND CURRENT ROW
+    )                                                   AS cumulative_spend
+FROM Students s
+JOIN Wallet_Ledger wl ON s.student_id = wl.student_id
+WHERE wl.transaction_timestamp >= NOW() - INTERVAL '30 days'
+  AND wl.transaction_type IN ('CAFETERIA_SPEND', 'BOOKSHOP_SPEND')
+GROUP BY
+    s.student_id, s.roll_number, s.full_name, wl.transaction_type
+ORDER BY s.roll_number, wl.transaction_type;
+
+
+-- ─────────────────────────────────────────────────────────────
+-- 5B. Peak Cafeteria Hours  (hour × day-of-week heatmap data)
+-- ─────────────────────────────────────────────────────────────
+SELECT
+    EXTRACT(DOW  FROM co.order_timestamp)::INT          AS day_of_week_num,  -- 0=Sun
+    TO_CHAR(co.order_timestamp, 'Day')                  AS day_of_week,
+    EXTRACT(HOUR FROM co.order_timestamp)::INT          AS hour_of_day,
+    COUNT(co.order_id)                                  AS order_count,
+    SUM(co.total_amount)                                AS revenue,
+    ROUND(AVG(co.total_amount), 2)                      AS avg_order_value,
+    RANK() OVER (ORDER BY COUNT(co.order_id) DESC)      AS busiest_rank
+FROM Cafeteria_Orders co
+WHERE co.status = 'COMPLETED'
+GROUP BY
+    EXTRACT(DOW  FROM co.order_timestamp),
+    TO_CHAR(co.order_timestamp, 'Day'),
+    EXTRACT(HOUR FROM co.order_timestamp)
+ORDER BY busiest_rank;
+
+
+-- ─────────────────────────────────────────────────────────────
+-- 5C. Top 10 Students by Total Wallet Activity
+-- ─────────────────────────────────────────────────────────────
+SELECT
+    s.roll_number,
+    s.full_name,
+    s.current_balance,
+    SUM(CASE WHEN wl.amount > 0 THEN  wl.amount    ELSE 0 END) AS total_credited,
+    SUM(CASE WHEN wl.amount < 0 THEN  ABS(wl.amount) ELSE 0 END) AS total_debited,
+    COUNT(*)                                                      AS total_transactions,
+    DENSE_RANK() OVER (
+        ORDER BY SUM(ABS(wl.amount)) DESC
+    )                                                             AS activity_rank
+FROM Students s
+JOIN Wallet_Ledger wl ON s.student_id = wl.student_id
+GROUP BY s.student_id, s.roll_number, s.full_name, s.current_balance
+ORDER BY activity_rank
+LIMIT 10;
+
+
+-- ─────────────────────────────────────────────────────────────
+-- 5D. Most Popular Cafeteria Items with Revenue Share %
+-- ─────────────────────────────────────────────────────────────
+WITH item_stats AS (
+    SELECT
+        ci.item_id,
+        ci.item_name,
+        ci.category,
+        ci.price                                                     AS current_price,
+        SUM(cod.quantity_purchased)                                   AS units_sold,
+        SUM(cod.quantity_purchased * cod.unit_price_at_purchase)      AS revenue
+    FROM Cafeteria_Items ci
+    JOIN Cafeteria_Order_Details cod ON ci.item_id   = cod.item_id
+    JOIN Cafeteria_Orders        co  ON cod.order_id = co.order_id
+                                    AND co.status = 'COMPLETED'
+    GROUP BY ci.item_id, ci.item_name, ci.category, ci.price
+),
+grand_total AS (
+    SELECT SUM(revenue) AS total FROM item_stats
+)
+SELECT
+    ist.item_name,
+    ist.category,
+    ist.current_price,
+    ist.units_sold,
+    ROUND(ist.revenue, 2)                                             AS revenue,
+    ROUND((ist.revenue / NULLIF(gt.total, 0)) * 100, 2)              AS revenue_share_pct,
+    RANK() OVER (ORDER BY ist.units_sold DESC)                        AS popularity_rank,
+    RANK() OVER (ORDER BY ist.revenue    DESC)                        AS revenue_rank
+FROM item_stats ist
+CROSS JOIN grand_total gt
+ORDER BY popularity_rank;
+
+
+-- ─────────────────────────────────────────────────────────────
+-- 5E. Fraud Review Dashboard
+--     Suspicious sessions enriched with the student's own avg
+--     score to give admins the context to decide.
+-- ─────────────────────────────────────────────────────────────
+WITH per_student_game_stats AS (
+    SELECT
+        student_id,
+        game_id,
+        ROUND(AVG(raw_score), 0) AS avg_processed_score,
+        MAX(raw_score)            AS max_processed_score,
+        COUNT(*)                  AS total_clean_sessions
+    FROM   Game_Sessions
+    WHERE  status = 'PROCESSED'
+    GROUP BY student_id, game_id
+)
+SELECT
+    gs.session_id,
+    s.roll_number,
+    s.full_name,
+    eg.game_name,
+    gs.raw_score                                                            AS flagged_score,
+    gs.cash_earned                                                          AS cash_that_would_have_been_credited,
+    pss.avg_processed_score                                                 AS student_avg_score,
+    pss.max_processed_score                                                 AS student_personal_best,
+    pss.total_clean_sessions,
+    ROUND(gs.raw_score / NULLIF(pss.avg_processed_score, 0), 2)             AS score_vs_avg_multiplier,
+    gs.external_match_id,
+    gs.played_at
+FROM Game_Sessions            gs
+JOIN Students                  s   ON gs.student_id = s.student_id
+JOIN E_Sports_Games            eg  ON gs.game_id    = eg.game_id
+LEFT JOIN per_student_game_stats pss
+       ON pss.student_id = gs.student_id
+      AND pss.game_id    = gs.game_id
+WHERE gs.status = 'REJECTED_SUSPICIOUS'
+ORDER BY gs.played_at DESC;
+
+
+-- ─────────────────────────────────────────────────────────────
+-- 5F. Per-Student Game Performance Trend
+--     Rolling 7-session average + cumulative earnings.
+--     Use as the data source for a performance graph on the
+--     student's profile page.
+-- ─────────────────────────────────────────────────────────────
+SELECT
+    s.roll_number,
+    s.full_name,
+    eg.game_name,
+    gs.played_at::DATE                                       AS play_date,
+    gs.raw_score,
+    gs.cash_earned,
+
+    -- Rolling 7-session average score (per student per game)
+    ROUND(AVG(gs.raw_score) OVER (
+        PARTITION BY gs.student_id, gs.game_id
+        ORDER BY gs.played_at
+        ROWS BETWEEN 6 PRECEDING AND CURRENT ROW
+    ), 0)                                                    AS rolling_7_session_avg,
+
+    -- Cumulative earnings (per student per game)
+    SUM(gs.cash_earned) OVER (
+        PARTITION BY gs.student_id, gs.game_id
+        ORDER BY gs.played_at
+        ROWS BETWEEN UNBOUNDED PRECEDING AND CURRENT ROW
+    )                                                        AS cumulative_earnings,
+
+    -- Session number (for X-axis of charts)
+    ROW_NUMBER() OVER (
+        PARTITION BY gs.student_id, gs.game_id
+        ORDER BY gs.played_at
+    )                                                        AS session_number
+
+FROM Game_Sessions  gs
+JOIN Students        s  ON gs.student_id = s.student_id
+JOIN E_Sports_Games  eg ON gs.game_id    = eg.game_id
+WHERE gs.status = 'PROCESSED'
+ORDER BY s.roll_number, eg.game_name, gs.played_at;
+
+
+-- ─────────────────────────────────────────────────────────────
+-- 5G. Bookshop Revenue by Category (with MoM comparison)
+-- ─────────────────────────────────────────────────────────────
+WITH monthly AS (
+    SELECT
+        bi.item_category,
+        DATE_TRUNC('month', bo.order_timestamp)           AS month,
+        SUM(bod.quantity_purchased * bod.unit_price_at_purchase) AS revenue,
+        SUM(bod.quantity_purchased)                       AS units_sold
+    FROM Bookshop_Items         bi
+    JOIN Bookshop_Order_Details bod ON bi.item_id   = bod.item_id
+    JOIN Bookshop_Orders        bo  ON bod.order_id = bo.order_id
+                                   AND bo.status = 'COMPLETED'
+    GROUP BY bi.item_category, DATE_TRUNC('month', bo.order_timestamp)
+)
+SELECT
+    item_category,
+    TO_CHAR(month, 'YYYY-MM')                             AS month,
+    ROUND(revenue, 2)                                     AS revenue,
+    units_sold,
+    LAG(revenue) OVER (
+        PARTITION BY item_category
+        ORDER BY month
+    )                                                     AS prev_month_revenue,
+    ROUND(
+        (revenue - LAG(revenue) OVER (
+            PARTITION BY item_category ORDER BY month
+        )) / NULLIF(LAG(revenue) OVER (
+            PARTITION BY item_category ORDER BY month
+        ), 0) * 100, 2
+    )                                                     AS revenue_growth_pct
+FROM monthly
+ORDER BY item_category, month DESC;
+
+
+-- ─────────────────────────────────────────────────────────────
+-- 5H. Idle Students  (no wallet activity in last 30 days)
+--     Use for re-engagement campaigns or balance expiry logic.
+-- ─────────────────────────────────────────────────────────────
+SELECT
+    s.student_id,
+    s.roll_number,
+    s.full_name,
+    s.current_balance,
+    MAX(wl.transaction_timestamp)    AS last_activity,
+    NOW() - MAX(wl.transaction_timestamp) AS idle_duration
+FROM Students s
+LEFT JOIN Wallet_Ledger wl ON s.student_id = wl.student_id
+GROUP BY s.student_id, s.roll_number, s.full_name, s.current_balance
+HAVING MAX(wl.transaction_timestamp) < NOW() - INTERVAL '30 days'
+    OR MAX(wl.transaction_timestamp) IS NULL
+ORDER BY last_activity ASC NULLS FIRST;
+
+
+-- ============================================================
+-- EXAMPLE USAGE
+-- ============================================================
+
+
+-- Register a student
+CALL sp_register_student('24L-1234', 'Ali Hassan', 'bcrypt_hash_here', 500.00);
+
+-- Place a cafeteria order (burger × 1, fries × 2)
+DO $$
+DECLARE v_order_id INT; v_total DECIMAL;
+BEGIN
+    CALL sp_place_cafeteria_order(
+        1,
+        '[{"item_id": 1, "quantity": 1}, {"item_id": 3, "quantity": 2}]'::JSONB,
+        v_order_id,
+        v_total
+    );
+    RAISE NOTICE 'Order ID: %, Total: %', v_order_id, v_total;
+END;
+$$;
+
+-- Record a game session
+DO $$
+DECLARE v_sid INT; v_cash DECIMAL; v_status VARCHAR;
+BEGIN
+    CALL sp_record_game_session(
+        1, 'VALORANT_FAST', 'MATCH_ABC123', 4500,
+        v_sid, v_cash, v_status
+    );
+    RAISE NOTICE 'Session %, earned %, status %', v_sid, v_cash, v_status;
+END;
+$$;
+
+-- Admin: restock samosas
+CALL sp_restock_cafeteria_item(3, 50);
+
+-- Admin: manual wallet top-up
+CALL sp_manual_wallet_adjustment(1, 200.00);
+
+-- Query a student's full transaction history
+SELECT * FROM vw_wallet_transaction_history WHERE student_id = 1;
+
+-- Check leaderboard
+SELECT * FROM vw_esports_leaderboard ORDER BY game_rank LIMIT 10;
+
+
+
