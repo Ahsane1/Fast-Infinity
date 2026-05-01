@@ -18,6 +18,7 @@ const { getStudentDashboard } = require('./controllers/dashboardController');
 const { recordSession } = require('./controllers/gameController');
 const { placeOrder } = require('./controllers/cafeteriaController');
 const { placeBookshopOrder } = require('./controllers/bookshopController');
+const { restockItem, adjustWallet } = require('./controllers/adminController');
 
 // ------------------
 // --- API ROUTES ---
@@ -42,6 +43,10 @@ app.post('/api/cafeteria/checkout', verifyToken, placeOrder);
 
 // Bookshop order Route (Protected)
 app.post('/api/bookshop/checkout', verifyToken, placeBookshopOrder);
+
+// Restock item route (admin)
+app.post('/api/admin/restock', verifyToken, restockItem);
+app.post('/api/admin/wallet', verifyToken, adjustWallet);
 
 // ------------------------
 // --- SERVER BOOTSTRAP ---
