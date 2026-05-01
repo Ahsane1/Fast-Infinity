@@ -1984,7 +1984,7 @@ BEGIN;
 --  Hamza Qureshi :  5000 + 800 + 640 + 540 - 400 - 2850      = 3730  (3-day streak)
 --  Zara Hussain  :  1500 + 200 + 360 - 400 - 200             = 1460
 INSERT INTO Students (student_id, roll_number, password_hash, full_name, current_balance) VALUES
-( 11, '23L-0001', '$2b$12$Ali.HashedPwd.MockOnly.000001', 'Ali Hassan',      1570.00),
+( 1, '23L-0001', '$2b$12$Ali.HashedPwd.MockOnly.000001', 'Ali Hassan',      1570.00),
 ( 2, '23L-0002', '$2b$12$Fat.HashedPwd.MockOnly.000002', 'Fatima Malik',     265.00),
 ( 3, '23L-0003', '$2b$12$Oma.HashedPwd.MockOnly.000003', 'Omar Sheikh',      600.00),
 ( 4, '23L-0004', '$2b$12$Aye.HashedPwd.MockOnly.000004', 'Ayesha Khan',      880.00),
