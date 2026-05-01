@@ -1993,3 +1993,539 @@ GROUP BY
     EXTRACT(DOW  FROM gs.played_at),
     TO_CHAR(gs.played_at, 'Day')
 ORDER BY s.roll_number, eg.game_name, day_of_week, hour_of_day;
+
+
+
+
+
+
+
+-- ================================================================
+--  FAST-INFINITY  |  Seed / Mock Data
+--  Run order: 1_ddl.sql → 2_db_layer.sql → 3_transactions.sql → THIS
+--
+--  10 Students · 10 Cafeteria Items · 8 Bookshop Items · 4 Games
+--  20 Game Sessions (1 fraud-flagged) · 15 Cafeteria Orders
+--  8 Bookshop Orders · Full Wallet Ledger (52 entries)
+--
+--  GUARANTEED CONSISTENCY
+--    ✓ Every student's current_balance = SUM(wallet_ledger.amount)
+--    ✓ Every item's stock_quantity = initial - sold + restocked
+--    ✓ Every order's total_amount = SUM(qty × unit_price) in details
+--    ✓ REJECTED session has NO matching wallet ledger entry
+--    ✓ FK insert order respects all constraints
+-- ================================================================
+
+BEGIN;
+
+-- ────────────────────────────────────────────────────────────────
+-- 1. STUDENTS
+--    Balances are pre-computed to match Section 11 (Wallet Ledger)
+--    Formula per student:  initial + game_earnings - cafeteria - bookshop
+-- ────────────────────────────────────────────────────────────────
+--  Ali Hassan    :  2000 + 250 + 320 - 260 - 200 - 220 - 320 = 1570
+--  Fatima Malik  :  1500 + 175 + 240 - 270 - 180 - 1200      =  265
+--  Omar Sheikh   :  1800 + 480 + 360 - 220 - 170 - 1650      =  600
+--  Ayesha Khan   :  1200 + 150 - 170 - 300                   =  880
+--  Bilal Ahmed   :  3000 + 150 + 120 - 520 - 1800            =  950  (fraud session NOT credited)
+--  Sana Tariq    :  1000 + 288 - 340 - 750                   =  198  (idle > 30 days)
+--  Usman Raza    :  2500 + 390 + 480 - 400 - 1210            = 1760
+--  Hira Baig     :   800 +  90 + 120 - 340                   =  670
+--  Hamza Qureshi :  5000 + 800 + 640 + 540 - 400 - 2850      = 3730  (3-day streak)
+--  Zara Hussain  :  1500 + 200 + 360 - 400 - 200             = 1460
+INSERT INTO Students (student_id, roll_number, password_hash, full_name, current_balance) VALUES
+( 1, '23L-0001', '$2b$12$Ali.HashedPwd.MockOnly.000001', 'Ali Hassan',      1570.00),
+( 2, '23L-0002', '$2b$12$Fat.HashedPwd.MockOnly.000002', 'Fatima Malik',     265.00),
+( 3, '23L-0003', '$2b$12$Oma.HashedPwd.MockOnly.000003', 'Omar Sheikh',      600.00),
+( 4, '23L-0004', '$2b$12$Aye.HashedPwd.MockOnly.000004', 'Ayesha Khan',      880.00),
+( 5, '23L-0005', '$2b$12$Bil.HashedPwd.MockOnly.000005', 'Bilal Ahmed',      950.00),
+( 6, '22L-0101', '$2b$12$San.HashedPwd.MockOnly.000006', 'Sana Tariq',       198.00),
+( 7, '22L-0102', '$2b$12$Usm.HashedPwd.MockOnly.000007', 'Usman Raza',      1760.00),
+( 8, '22L-0103', '$2b$12$Hir.HashedPwd.MockOnly.000008', 'Hira Baig',        670.00),
+( 9, '21L-0201', '$2b$12$Ham.HashedPwd.MockOnly.000009', 'Hamza Qureshi',   3730.00),
+(10, '21L-0202', '$2b$12$Zar.HashedPwd.MockOnly.000010', 'Zara Hussain',    1460.00);
+
+
+-- ────────────────────────────────────────────────────────────────
+-- 2. E-SPORTS GAMES
+-- ────────────────────────────────────────────────────────────────
+INSERT INTO E_Sports_Games (game_id, external_game_code, game_name, score_to_cash_ratio, is_active) VALUES
+(1, 'VALORANT', 'Valorant',          0.1000, TRUE),
+(2, 'FIFA24',   'FIFA 24',           0.0500, TRUE),
+(3, 'CS2',      'Counter-Strike 2',  0.0800, TRUE),
+(4, 'PUBGM',    'PUBG Mobile',       0.0600, TRUE);
+
+
+-- ────────────────────────────────────────────────────────────────
+-- 3. CAFETERIA ITEMS
+--    stock_quantity = CURRENT state after all purchases + restocks
+--    Derivation:
+--      Chicken Burger  : 50 initial − 5 sold                = 45
+--      Masala Fries    : 60 initial − 4 sold                = 56
+--      Samosa (2 pcs)  : 80 initial − 7 sold                = 73
+--      Chai            :100 initial − 7 sold                = 93
+--      Cold Coffee     : 20 initial +15 restocked − 5 sold  = 30
+--      Biryani Plate   :  5 initial +20 restocked − 4 sold  = 21  ← restocked from critical low
+--      Club Sandwich   : 30 initial − 4 sold                = 26
+--      Mineral Water   :150 initial − 1 sold                =149
+--      Mango Shake     : 40 initial − 3 sold                = 37
+--      Chocolate Muffin: 50 initial − 3 sold                = 47
+-- ────────────────────────────────────────────────────────────────
+INSERT INTO Cafeteria_Items (item_id, item_name, description, price, stock_quantity, category, is_active) VALUES
+( 1, 'Chicken Burger',    'Crispy chicken fillet, lettuce, mayo on a sesame bun',  180.00,  45, 'FOOD',     TRUE),
+( 2, 'Masala Fries',      'Shoestring fries tossed in desi spice blend',            80.00,  56, 'SNACK',    TRUE),
+( 3, 'Samosa (2 pcs)',    'Flaky pastry stuffed with spiced potatoes & meat',       40.00,  73, 'SNACK',    TRUE),
+( 4, 'Chai',              'Strong doodh patti — the FAST standard',                 30.00,  93, 'BEVERAGE', TRUE),
+( 5, 'Cold Coffee',       'Iced blended coffee with full-cream milk',              120.00,  30, 'BEVERAGE', TRUE),
+( 6, 'Biryani Plate',     'Chicken biryani with raita and garden salad',           220.00,  21, 'FOOD',     TRUE),
+( 7, 'Club Sandwich',     'Triple-decker chicken & veggie on toasted bread',       160.00,  26, 'FOOD',     TRUE),
+( 8, 'Mineral Water',     'Nestle 500 ml chilled bottle',                           50.00, 149, 'BEVERAGE', TRUE),
+( 9, 'Mango Shake',       'Thick Chaunsa mango milkshake',                         100.00,  37, 'BEVERAGE', TRUE),
+(10, 'Chocolate Muffin',  'Double-chocolate chip muffin, freshly baked',            70.00,  47, 'SNACK',    TRUE);
+
+
+-- ────────────────────────────────────────────────────────────────
+-- 4. BOOKSHOP ITEMS
+--    stock_quantity = CURRENT state after all purchases
+--      Data Structures      : 15 − 1 = 14
+--      Calculus             : 10 − 2 =  8
+--      A4 Notebook          : 50 − 6 = 44
+--      Ball Pen Set         : 40 − 2 = 38
+--      USB Flash Drive 32GB : 20 − 2 = 18
+--      FAST Hoodie          : 30 − 1 = 29
+--      Intro to OOP         : 12 − 1 = 11
+--      Scientific Calculator: 15 − 2 = 13
+-- ────────────────────────────────────────────────────────────────
+INSERT INTO Bookshop_Items (item_id, item_name, item_category, isbn, author, price, stock_quantity, is_active) VALUES
+(1, 'Data Structures & Algorithms in C++', 'TEXTBOOK',    '978-0132847377', 'Michael Goodrich',   850.00,  14, TRUE),
+(2, 'Calculus: Early Transcendentals',     'TEXTBOOK',    '978-1285741550', 'James Stewart',     1200.00,   8, TRUE),
+(3, 'A4 Spiral Notebook (200 pages)',      'STATIONERY',  NULL,              NULL,                120.00,  44, TRUE),
+(4, 'Ball Pen Set (10 pcs)',               'STATIONERY',  NULL,              NULL,                 80.00,  38, TRUE),
+(5, 'USB Flash Drive 32GB',                'ELECTRONICS', NULL,              NULL,                450.00,  18, TRUE),
+(6, 'FAST-NUCES Hoodie (Navy Blue)',       'MERCHANDISE', NULL,              NULL,               1800.00,  29, TRUE),
+(7, 'Introduction to OOP with Java',       'TEXTBOOK',    '978-0132575669', 'Harvey M. Deitel',   750.00,  11, TRUE),
+(8, 'Casio FX-991EX Scientific Calculator','ELECTRONICS', NULL,              NULL,               1200.00,  13, TRUE);
+
+
+-- ────────────────────────────────────────────────────────────────
+-- 5. GAME SESSIONS
+--    Session 10 (Bilal, Valorant) is REJECTED_SUSPICIOUS
+--    His prior avg = (1500+1200)/2 = 1350
+--    Score 15000 > 5 × 1350 = 6750  → fraud flag triggered
+--    → No Wallet_Ledger entry exists for session 10
+--
+--    Sessions 16-17-18 are Hamza on 3 consecutive days
+--    → Detected by the Island-Detection streak query (Q1)
+-- ────────────────────────────────────────────────────────────────
+INSERT INTO Game_Sessions (session_id, student_id, game_id, external_match_id, raw_score, cash_earned, played_at, status) VALUES
+-- Ali Hassan — Valorant then CS2 (consecutive days, 2-day streak)
+( 1,  1, 1, 'MATCH-VAL-00001', 2500,  250.00, NOW() - INTERVAL '45 days' + INTERVAL '19 hours', 'PROCESSED'),
+( 2,  1, 3, 'MATCH-CS2-00001', 4000,  320.00, NOW() - INTERVAL '44 days' + INTERVAL '20 hours', 'PROCESSED'),
+-- Fatima Malik — FIFA then Valorant
+( 3,  2, 2, 'MATCH-FIFA-00001',3500,  175.00, NOW() - INTERVAL '42 days' + INTERVAL '18 hours', 'PROCESSED'),
+( 4,  2, 1, 'MATCH-VAL-00002', 2400,  240.00, NOW() - INTERVAL '35 days' + INTERVAL '21 hours', 'PROCESSED'),
+-- Omar Sheikh — CS2 then PUBG (consecutive days)
+( 5,  3, 3, 'MATCH-CS2-00002', 6000,  480.00, NOW() - INTERVAL '38 days' + INTERVAL '17 hours', 'PROCESSED'),
+( 6,  3, 4, 'MATCH-PUBG-00001',6000,  360.00, NOW() - INTERVAL '37 days' + INTERVAL '20 hours', 'PROCESSED'),
+-- Ayesha Khan — FIFA
+( 7,  4, 2, 'MATCH-FIFA-00002',3000,  150.00, NOW() - INTERVAL '30 days' + INTERVAL '16 hours', 'PROCESSED'),
+-- Bilal Ahmed — two clean Valorant sessions, then one ANOMALOUS
+( 8,  5, 1, 'MATCH-VAL-00003', 1500,  150.00, NOW() - INTERVAL '20 days' + INTERVAL '22 hours', 'PROCESSED'),
+( 9,  5, 1, 'MATCH-VAL-00004', 1200,  120.00, NOW() - INTERVAL '15 days' + INTERVAL '21 hours', 'PROCESSED'),
+(10,  5, 1, 'MATCH-VAL-00005',15000, 1500.00, NOW() - INTERVAL '10 days' + INTERVAL '23 hours', 'REJECTED_SUSPICIOUS'),
+-- Sana Tariq — CS2 (happened 40 days ago; she's now idle)
+(11,  6, 3, 'MATCH-CS2-00003', 3600,  288.00, NOW() - INTERVAL '40 days' + INTERVAL '18 hours', 'PROCESSED'),
+-- Usman Raza — Valorant + CS2
+(12,  7, 1, 'MATCH-VAL-00006', 3900,  390.00, NOW() - INTERVAL '28 days' + INTERVAL '19 hours', 'PROCESSED'),
+(13,  7, 3, 'MATCH-CS2-00004', 6000,  480.00, NOW() - INTERVAL '22 days' + INTERVAL '20 hours', 'PROCESSED'),
+-- Hira Baig — FIFA + PUBG
+(14,  8, 2, 'MATCH-FIFA-00003',1800,   90.00, NOW() - INTERVAL '33 days' + INTERVAL '17 hours', 'PROCESSED'),
+(15,  8, 4, 'MATCH-PUBG-00002',2000,  120.00, NOW() - INTERVAL '32 days' + INTERVAL '19 hours', 'PROCESSED'),
+-- Hamza Qureshi — 3 CONSECUTIVE DAYS across 3 different games (streak = 3)
+(16,  9, 1, 'MATCH-VAL-00007', 8000,  800.00, NOW() - INTERVAL '5 days'  + INTERVAL '19 hours', 'PROCESSED'),
+(17,  9, 3, 'MATCH-CS2-00005', 8000,  640.00, NOW() - INTERVAL '4 days'  + INTERVAL '20 hours', 'PROCESSED'),
+(18,  9, 4, 'MATCH-PUBG-00003',9000,  540.00, NOW() - INTERVAL '3 days'  + INTERVAL '21 hours', 'PROCESSED'),
+-- Zara Hussain — FIFA (old) + Valorant (recent)
+(19, 10, 2, 'MATCH-FIFA-00004',4000,  200.00, NOW() - INTERVAL '50 days' + INTERVAL '16 hours', 'PROCESSED'),
+(20, 10, 1, 'MATCH-VAL-00008', 3600,  360.00, NOW() - INTERVAL '8 days'  + INTERVAL '20 hours', 'PROCESSED');
+
+
+-- ────────────────────────────────────────────────────────────────
+-- 6. CAFETERIA ORDERS
+--    Timestamps spread across different hours for peak-hour query
+--    and different days for date-gap analysis
+-- ────────────────────────────────────────────────────────────────
+INSERT INTO Cafeteria_Orders (order_id, student_id, order_timestamp, total_amount, status) VALUES
+-- Two orders each on different parts of the day for heatmap variety
+( 1,  1, NOW() - INTERVAL '30 days' + INTERVAL '12 hours 30 minutes', 260.00, 'COMPLETED'),
+( 2,  1, NOW() - INTERVAL '28 days' + INTERVAL '10 hours 15 minutes', 200.00, 'COMPLETED'),
+( 3,  2, NOW() - INTERVAL '25 days' + INTERVAL '13 hours 00 minutes', 270.00, 'COMPLETED'),
+( 4,  3, NOW() - INTERVAL '22 days' + INTERVAL '12 hours 00 minutes', 220.00, 'COMPLETED'),
+( 5,  4, NOW() - INTERVAL '20 days' + INTERVAL '14 hours 30 minutes', 170.00, 'COMPLETED'),
+( 6,  5, NOW() - INTERVAL '18 days' + INTERVAL '13 hours 30 minutes', 520.00, 'COMPLETED'),  -- biggest single order
+( 7,  2, NOW() - INTERVAL '15 days' + INTERVAL '11 hours 00 minutes', 180.00, 'COMPLETED'),
+( 8,  6, NOW() - INTERVAL '38 days' + INTERVAL '12 hours 45 minutes', 340.00, 'COMPLETED'),  -- Sana's only order (idle)
+( 9,  7, NOW() - INTERVAL '10 days' + INTERVAL '13 hours 15 minutes', 400.00, 'COMPLETED'),
+(10,  3, NOW() - INTERVAL '8 days'  + INTERVAL '10 hours 30 minutes', 170.00, 'COMPLETED'),
+(11,  8, NOW() - INTERVAL '6 days'  + INTERVAL '15 hours 00 minutes', 340.00, 'COMPLETED'),
+(12,  9, NOW() - INTERVAL '5 days'  + INTERVAL '12 hours 30 minutes', 400.00, 'COMPLETED'),
+(13, 10, NOW() - INTERVAL '4 days'  + INTERVAL '14 hours 00 minutes', 400.00, 'COMPLETED'),
+(14,  1, NOW() - INTERVAL '3 days'  + INTERVAL '13 hours 00 minutes', 220.00, 'COMPLETED'),
+(15,  4, NOW() - INTERVAL '2 days'  + INTERVAL '11 hours 30 minutes', 300.00, 'COMPLETED');
+
+
+-- ────────────────────────────────────────────────────────────────
+-- 7. CAFETERIA ORDER DETAILS
+--    Each row's qty × unit_price contributes to the order total
+-- ────────────────────────────────────────────────────────────────
+INSERT INTO Cafeteria_Order_Details (order_id, item_id, quantity_purchased, unit_price_at_purchase) VALUES
+-- Order  1: Ali      — Chicken Burger(180×1) + Masala Fries(80×1)   = 260
+( 1, 1, 1, 180.00),
+( 1, 2, 1,  80.00),
+-- Order  2: Ali      — Cold Coffee(120×1) + Samosa(40×2)            = 200
+( 2, 5, 1, 120.00),
+( 2, 3, 2,  40.00),
+-- Order  3: Fatima   — Biryani(220×1) + Mineral Water(50×1)         = 270
+( 3, 6, 1, 220.00),
+( 3, 8, 1,  50.00),
+-- Order  4: Omar     — Club Sandwich(160×1) + Chai(30×2)            = 220
+( 4, 7, 1, 160.00),
+( 4, 4, 2,  30.00),
+-- Order  5: Ayesha   — Mango Shake(100×1) + Choc Muffin(70×1)       = 170
+( 5, 9, 1, 100.00),
+( 5,10, 1,  70.00),
+-- Order  6: Bilal    — Chicken Burger(180×2) + Masala Fries(80×2)   = 520
+( 6, 1, 2, 180.00),
+( 6, 2, 2,  80.00),
+-- Order  7: Fatima   — Samosa(40×3) + Chai(30×2)                    = 180
+( 7, 3, 3,  40.00),
+( 7, 4, 2,  30.00),
+-- Order  8: Sana     — Biryani(220×1) + Cold Coffee(120×1)          = 340
+( 8, 6, 1, 220.00),
+( 8, 5, 1, 120.00),
+-- Order  9: Usman    — Club Sandwich(160×2) + Masala Fries(80×1)    = 400
+( 9, 7, 2, 160.00),
+( 9, 2, 1,  80.00),
+-- Order 10: Omar     — Chai(30×3) + Samosa(40×2)                    = 170
+(10, 4, 3,  30.00),
+(10, 3, 2,  40.00),
+-- Order 11: Hira     — Mango Shake(100×2) + Choc Muffin(70×2)       = 340
+(11, 9, 2, 100.00),
+(11,10, 2,  70.00),
+-- Order 12: Hamza    — Chicken Burger(180×1) + Biryani(220×1)        = 400
+(12, 1, 1, 180.00),
+(12, 6, 1, 220.00),
+-- Order 13: Zara     — Cold Coffee(120×2) + Club Sandwich(160×1)    = 400
+(13, 5, 2, 120.00),
+(13, 7, 1, 160.00),
+-- Order 14: Ali      — Biryani(220×1)                               = 220
+(14, 6, 1, 220.00),
+-- Order 15: Ayesha   — Chicken Burger(180×1) + Cold Coffee(120×1)   = 300
+(15, 1, 1, 180.00),
+(15, 5, 1, 120.00);
+
+
+-- ────────────────────────────────────────────────────────────────
+-- 8. CAFETERIA INVENTORY LOGS
+--    2 restocks (Cold Coffee + Biryani) + 1 PURCHASE log per item
+--    per order (mirrors what sp_place_cafeteria_order would write)
+-- ────────────────────────────────────────────────────────────────
+INSERT INTO Cafeteria_Inventory_Logs (item_id, change_amount, transaction_type, order_id, log_timestamp) VALUES
+-- RESTOCKs (happened before purchases; restored critically low items)
+( 6, +20, 'RESTOCK', NULL, NOW() - INTERVAL '50 days'),   -- Biryani:     5 → 25
+( 5, +15, 'RESTOCK', NULL, NOW() - INTERVAL '45 days'),   -- Cold Coffee: 20 → 35
+
+-- PURCHASE logs (negative = stock going out)
+( 1, -1, 'PURCHASE',  1, NOW() - INTERVAL '30 days' + INTERVAL '12 hours 30 minutes'),
+( 2, -1, 'PURCHASE',  1, NOW() - INTERVAL '30 days' + INTERVAL '12 hours 30 minutes'),
+( 5, -1, 'PURCHASE',  2, NOW() - INTERVAL '28 days' + INTERVAL '10 hours 15 minutes'),
+( 3, -2, 'PURCHASE',  2, NOW() - INTERVAL '28 days' + INTERVAL '10 hours 15 minutes'),
+( 6, -1, 'PURCHASE',  3, NOW() - INTERVAL '25 days' + INTERVAL '13 hours 00 minutes'),
+( 8, -1, 'PURCHASE',  3, NOW() - INTERVAL '25 days' + INTERVAL '13 hours 00 minutes'),
+( 7, -1, 'PURCHASE',  4, NOW() - INTERVAL '22 days' + INTERVAL '12 hours 00 minutes'),
+( 4, -2, 'PURCHASE',  4, NOW() - INTERVAL '22 days' + INTERVAL '12 hours 00 minutes'),
+( 9, -1, 'PURCHASE',  5, NOW() - INTERVAL '20 days' + INTERVAL '14 hours 30 minutes'),
+(10, -1, 'PURCHASE',  5, NOW() - INTERVAL '20 days' + INTERVAL '14 hours 30 minutes'),
+( 1, -2, 'PURCHASE',  6, NOW() - INTERVAL '18 days' + INTERVAL '13 hours 30 minutes'),
+( 2, -2, 'PURCHASE',  6, NOW() - INTERVAL '18 days' + INTERVAL '13 hours 30 minutes'),
+( 3, -3, 'PURCHASE',  7, NOW() - INTERVAL '15 days' + INTERVAL '11 hours 00 minutes'),
+( 4, -2, 'PURCHASE',  7, NOW() - INTERVAL '15 days' + INTERVAL '11 hours 00 minutes'),
+( 6, -1, 'PURCHASE',  8, NOW() - INTERVAL '38 days' + INTERVAL '12 hours 45 minutes'),
+( 5, -1, 'PURCHASE',  8, NOW() - INTERVAL '38 days' + INTERVAL '12 hours 45 minutes'),
+( 7, -2, 'PURCHASE',  9, NOW() - INTERVAL '10 days' + INTERVAL '13 hours 15 minutes'),
+( 2, -1, 'PURCHASE',  9, NOW() - INTERVAL '10 days' + INTERVAL '13 hours 15 minutes'),
+( 4, -3, 'PURCHASE', 10, NOW() - INTERVAL '8 days'  + INTERVAL '10 hours 30 minutes'),
+( 3, -2, 'PURCHASE', 10, NOW() - INTERVAL '8 days'  + INTERVAL '10 hours 30 minutes'),
+( 9, -2, 'PURCHASE', 11, NOW() - INTERVAL '6 days'  + INTERVAL '15 hours 00 minutes'),
+(10, -2, 'PURCHASE', 11, NOW() - INTERVAL '6 days'  + INTERVAL '15 hours 00 minutes'),
+( 1, -1, 'PURCHASE', 12, NOW() - INTERVAL '5 days'  + INTERVAL '12 hours 30 minutes'),
+( 6, -1, 'PURCHASE', 12, NOW() - INTERVAL '5 days'  + INTERVAL '12 hours 30 minutes'),
+( 5, -2, 'PURCHASE', 13, NOW() - INTERVAL '4 days'  + INTERVAL '14 hours 00 minutes'),
+( 7, -1, 'PURCHASE', 13, NOW() - INTERVAL '4 days'  + INTERVAL '14 hours 00 minutes'),
+( 6, -1, 'PURCHASE', 14, NOW() - INTERVAL '3 days'  + INTERVAL '13 hours 00 minutes'),
+( 1, -1, 'PURCHASE', 15, NOW() - INTERVAL '2 days'  + INTERVAL '11 hours 30 minutes'),
+( 5, -1, 'PURCHASE', 15, NOW() - INTERVAL '2 days'  + INTERVAL '11 hours 30 minutes');
+
+
+-- ────────────────────────────────────────────────────────────────
+-- 9. BOOKSHOP ORDERS
+-- ────────────────────────────────────────────────────────────────
+INSERT INTO Bookshop_Orders (order_id, receipt_number, student_id, order_timestamp, total_amount, status) VALUES
+(1, 'BSP-202503-0001',  1, NOW() - INTERVAL '25 days',  320.00, 'COMPLETED'),  -- Ali
+(2, 'BSP-202503-0002',  2, NOW() - INTERVAL '20 days', 1200.00, 'COMPLETED'),  -- Fatima
+(3, 'BSP-202503-0003',  3, NOW() - INTERVAL '18 days', 1650.00, 'COMPLETED'),  -- Omar
+(4, 'BSP-202504-0001',  5, NOW() - INTERVAL '12 days', 1800.00, 'COMPLETED'),  -- Bilal (hoodie)
+(5, 'BSP-202503-0004',  6, NOW() - INTERVAL '36 days',  750.00, 'COMPLETED'),  -- Sana  (idle period)
+(6, 'BSP-202504-0002',  7, NOW() - INTERVAL '8 days',  1210.00, 'COMPLETED'),  -- Usman
+(7, 'BSP-202504-0003',  9, NOW() - INTERVAL '7 days',  2850.00, 'COMPLETED'),  -- Hamza (biggest order)
+(8, 'BSP-202503-0005', 10, NOW() - INTERVAL '40 days',  200.00, 'COMPLETED');  -- Zara  (old order)
+
+
+-- ────────────────────────────────────────────────────────────────
+-- 10. BOOKSHOP ORDER DETAILS
+-- ────────────────────────────────────────────────────────────────
+INSERT INTO Bookshop_Order_Details (order_id, item_id, quantity_purchased, unit_price_at_purchase) VALUES
+-- BO1: Ali     — A4 Notebook(120×2) + Pen Set(80×1)                 = 320
+(1, 3, 2, 120.00),
+(1, 4, 1,  80.00),
+-- BO2: Fatima  — Calculus(1200×1)                                   = 1200
+(2, 2, 1, 1200.00),
+-- BO3: Omar    — USB(450×1) + Scientific Calc(1200×1)               = 1650
+(3, 5, 1,  450.00),
+(3, 8, 1, 1200.00),
+-- BO4: Bilal   — FAST Hoodie(1800×1)                                = 1800
+(4, 6, 1, 1800.00),
+-- BO5: Sana    — OOP Textbook(750×1)                                = 750
+(5, 7, 1,  750.00),
+-- BO6: Usman   — Data Structures(850×1) + A4 Notebook(120×3)        = 1210
+(6, 1, 1,  850.00),
+(6, 3, 3,  120.00),
+-- BO7: Hamza   — Calculus(1200×1) + Sci Calc(1200×1) + USB(450×1)  = 2850
+(7, 2, 1, 1200.00),
+(7, 8, 1, 1200.00),
+(7, 5, 1,  450.00),
+-- BO8: Zara    — A4 Notebook(120×1) + Pen Set(80×1)                 = 200
+(8, 3, 1, 120.00),
+(8, 4, 1,  80.00);
+
+
+-- ────────────────────────────────────────────────────────────────
+-- 11. WALLET LEDGER  (52 entries)
+--     One entry per financial event, in chronological order
+--     GAME_EARNING  → amount is POSITIVE (credit)
+--     CAFETERIA_SPEND / BOOKSHOP_SPEND → amount is NEGATIVE (debit)
+--     MANUAL_ADJUSTMENT → positive for top-up, negative for deduction
+-- ────────────────────────────────────────────────────────────────
+INSERT INTO Wallet_Ledger
+    (student_id, transaction_type, amount, game_session_id, cafeteria_order_id, bookshop_order_id, transaction_timestamp)
+VALUES
+
+-- ══ Student 1: Ali Hassan ═══════════════════════════════════════
+--   Net: +2000 +250 +320 −260 −200 −320 −220 = 1570 ✓
+( 1, 'MANUAL_ADJUSTMENT',  2000.00, NULL, NULL, NULL, NOW() - INTERVAL '60 days'),
+( 1, 'GAME_EARNING',        250.00,    1, NULL, NULL, NOW() - INTERVAL '45 days' + INTERVAL '19 hours'),
+( 1, 'GAME_EARNING',        320.00,    2, NULL, NULL, NOW() - INTERVAL '44 days' + INTERVAL '20 hours'),
+( 1, 'CAFETERIA_SPEND',    -260.00, NULL,    1, NULL, NOW() - INTERVAL '30 days' + INTERVAL '12 hours 30 minutes'),
+( 1, 'CAFETERIA_SPEND',    -200.00, NULL,    2, NULL, NOW() - INTERVAL '28 days' + INTERVAL '10 hours 15 minutes'),
+( 1, 'BOOKSHOP_SPEND',     -320.00, NULL, NULL,    1, NOW() - INTERVAL '25 days'),
+( 1, 'CAFETERIA_SPEND',    -220.00, NULL,   14, NULL, NOW() - INTERVAL '3 days'  + INTERVAL '13 hours'),
+
+-- ══ Student 2: Fatima Malik ══════════════════════════════════════
+--   Net: +1500 +175 +240 −270 −180 −1200 = 265 ✓
+( 2, 'MANUAL_ADJUSTMENT',  1500.00, NULL, NULL, NULL, NOW() - INTERVAL '60 days'),
+( 2, 'GAME_EARNING',        175.00,    3, NULL, NULL, NOW() - INTERVAL '42 days' + INTERVAL '18 hours'),
+( 2, 'GAME_EARNING',        240.00,    4, NULL, NULL, NOW() - INTERVAL '35 days' + INTERVAL '21 hours'),
+( 2, 'CAFETERIA_SPEND',    -270.00, NULL,    3, NULL, NOW() - INTERVAL '25 days' + INTERVAL '13 hours'),
+( 2, 'BOOKSHOP_SPEND',    -1200.00, NULL, NULL,    2, NOW() - INTERVAL '20 days'),
+( 2, 'CAFETERIA_SPEND',    -180.00, NULL,    7, NULL, NOW() - INTERVAL '15 days' + INTERVAL '11 hours'),
+
+-- ══ Student 3: Omar Sheikh ═══════════════════════════════════════
+--   Net: +1800 +480 +360 −220 −1650 −170 = 600 ✓
+( 3, 'MANUAL_ADJUSTMENT',  1800.00, NULL, NULL, NULL, NOW() - INTERVAL '60 days'),
+( 3, 'GAME_EARNING',        480.00,    5, NULL, NULL, NOW() - INTERVAL '38 days' + INTERVAL '17 hours'),
+( 3, 'GAME_EARNING',        360.00,    6, NULL, NULL, NOW() - INTERVAL '37 days' + INTERVAL '20 hours'),
+( 3, 'CAFETERIA_SPEND',    -220.00, NULL,    4, NULL, NOW() - INTERVAL '22 days' + INTERVAL '12 hours'),
+( 3, 'BOOKSHOP_SPEND',    -1650.00, NULL, NULL,    3, NOW() - INTERVAL '18 days'),
+( 3, 'CAFETERIA_SPEND',    -170.00, NULL,   10, NULL, NOW() - INTERVAL '8 days'  + INTERVAL '10 hours 30 minutes'),
+
+-- ══ Student 4: Ayesha Khan ═══════════════════════════════════════
+--   Net: +1200 +150 −170 −300 = 880 ✓
+( 4, 'MANUAL_ADJUSTMENT',  1200.00, NULL, NULL, NULL, NOW() - INTERVAL '60 days'),
+( 4, 'GAME_EARNING',        150.00,    7, NULL, NULL, NOW() - INTERVAL '30 days' + INTERVAL '16 hours'),
+( 4, 'CAFETERIA_SPEND',    -170.00, NULL,    5, NULL, NOW() - INTERVAL '20 days' + INTERVAL '14 hours 30 minutes'),
+( 4, 'CAFETERIA_SPEND',    -300.00, NULL,   15, NULL, NOW() - INTERVAL '2 days'  + INTERVAL '11 hours 30 minutes'),
+
+-- ══ Student 5: Bilal Ahmed ═══════════════════════════════════════
+--   Net: +3000 +150 +120 −520 −1800 = 950 ✓
+--   NOTE: Session 10 (REJECTED_SUSPICIOUS) has NO ledger entry
+( 5, 'MANUAL_ADJUSTMENT',  3000.00, NULL, NULL, NULL, NOW() - INTERVAL '60 days'),
+( 5, 'GAME_EARNING',        150.00,    8, NULL, NULL, NOW() - INTERVAL '20 days' + INTERVAL '22 hours'),
+( 5, 'CAFETERIA_SPEND',    -520.00, NULL,    6, NULL, NOW() - INTERVAL '18 days' + INTERVAL '13 hours 30 minutes'),
+( 5, 'GAME_EARNING',        120.00,    9, NULL, NULL, NOW() - INTERVAL '15 days' + INTERVAL '21 hours'),
+( 5, 'BOOKSHOP_SPEND',    -1800.00, NULL, NULL,    4, NOW() - INTERVAL '12 days'),
+
+-- ══ Student 6: Sana Tariq ════════════════════════════════════════
+--   Net: +1000 +288 −340 −750 = 198 ✓
+--   Last activity 36 days ago → appears in IDLE student query (Q5H)
+( 6, 'MANUAL_ADJUSTMENT',  1000.00, NULL, NULL, NULL, NOW() - INTERVAL '90 days'),
+( 6, 'GAME_EARNING',        288.00,   11, NULL, NULL, NOW() - INTERVAL '40 days' + INTERVAL '18 hours'),
+( 6, 'CAFETERIA_SPEND',    -340.00, NULL,    8, NULL, NOW() - INTERVAL '38 days' + INTERVAL '12 hours 45 minutes'),
+( 6, 'BOOKSHOP_SPEND',     -750.00, NULL, NULL,    5, NOW() - INTERVAL '36 days'),
+
+-- ══ Student 7: Usman Raza ════════════════════════════════════════
+--   Net: +2500 +390 +480 −400 −1210 = 1760 ✓
+( 7, 'MANUAL_ADJUSTMENT',  2500.00, NULL, NULL, NULL, NOW() - INTERVAL '90 days'),
+( 7, 'GAME_EARNING',        390.00,   12, NULL, NULL, NOW() - INTERVAL '28 days' + INTERVAL '19 hours'),
+( 7, 'GAME_EARNING',        480.00,   13, NULL, NULL, NOW() - INTERVAL '22 days' + INTERVAL '20 hours'),
+( 7, 'CAFETERIA_SPEND',    -400.00, NULL,    9, NULL, NOW() - INTERVAL '10 days' + INTERVAL '13 hours 15 minutes'),
+( 7, 'BOOKSHOP_SPEND',    -1210.00, NULL, NULL,    6, NOW() - INTERVAL '8 days'),
+
+-- ══ Student 8: Hira Baig ═════════════════════════════════════════
+--   Net: +800 +90 +120 −340 = 670 ✓
+( 8, 'MANUAL_ADJUSTMENT',   800.00, NULL, NULL, NULL, NOW() - INTERVAL '90 days'),
+( 8, 'GAME_EARNING',         90.00,   14, NULL, NULL, NOW() - INTERVAL '33 days' + INTERVAL '17 hours'),
+( 8, 'GAME_EARNING',        120.00,   15, NULL, NULL, NOW() - INTERVAL '32 days' + INTERVAL '19 hours'),
+( 8, 'CAFETERIA_SPEND',    -340.00, NULL,   11, NULL, NOW() - INTERVAL '6 days'  + INTERVAL '15 hours'),
+
+-- ══ Student 9: Hamza Qureshi ══════════════════════════════════════
+--   Net: +5000 +800 +640 +540 −400 −2850 = 3730 ✓
+--   Sessions 16,17,18 on 3 consecutive days → streak query returns 3
+( 9, 'MANUAL_ADJUSTMENT',  5000.00, NULL, NULL, NULL, NOW() - INTERVAL '180 days'),
+( 9, 'BOOKSHOP_SPEND',    -2850.00, NULL, NULL,    7, NOW() - INTERVAL '7 days'),
+( 9, 'CAFETERIA_SPEND',    -400.00, NULL,   12, NULL, NOW() - INTERVAL '5 days'  + INTERVAL '12 hours 30 minutes'),
+( 9, 'GAME_EARNING',        800.00,   16, NULL, NULL, NOW() - INTERVAL '5 days'  + INTERVAL '19 hours'),
+( 9, 'GAME_EARNING',        640.00,   17, NULL, NULL, NOW() - INTERVAL '4 days'  + INTERVAL '20 hours'),
+( 9, 'GAME_EARNING',        540.00,   18, NULL, NULL, NOW() - INTERVAL '3 days'  + INTERVAL '21 hours'),
+
+-- ══ Student 10: Zara Hussain ══════════════════════════════════════
+--   Net: +1500 +200 −200 +360 −400 = 1460 ✓
+(10, 'MANUAL_ADJUSTMENT',  1500.00, NULL, NULL, NULL, NOW() - INTERVAL '180 days'),
+(10, 'GAME_EARNING',        200.00,   19, NULL, NULL, NOW() - INTERVAL '50 days' + INTERVAL '16 hours'),
+(10, 'BOOKSHOP_SPEND',     -200.00, NULL, NULL,    8, NOW() - INTERVAL '40 days'),
+(10, 'GAME_EARNING',        360.00,   20, NULL, NULL, NOW() - INTERVAL '8 days'  + INTERVAL '20 hours'),
+(10, 'CAFETERIA_SPEND',    -400.00, NULL,   13, NULL, NOW() - INTERVAL '4 days'  + INTERVAL '14 hours');
+
+
+-- ────────────────────────────────────────────────────────────────
+-- 12. RESET SEQUENCES
+--     So the next INSERT after this seed uses the correct next ID
+-- ────────────────────────────────────────────────────────────────
+SELECT setval(pg_get_serial_sequence('Students',               'student_id'),  10);
+SELECT setval(pg_get_serial_sequence('E_Sports_Games',         'game_id'),      4);
+SELECT setval(pg_get_serial_sequence('Cafeteria_Items',        'item_id'),     10);
+SELECT setval(pg_get_serial_sequence('Bookshop_Items',         'item_id'),      8);
+SELECT setval(pg_get_serial_sequence('Game_Sessions',          'session_id'),  20);
+SELECT setval(pg_get_serial_sequence('Cafeteria_Orders',       'order_id'),    15);
+SELECT setval(pg_get_serial_sequence('Bookshop_Orders',        'order_id'),     8);
+SELECT setval(pg_get_serial_sequence('Wallet_Ledger',          'transaction_id'),
+              (SELECT COUNT(*) FROM Wallet_Ledger));
+SELECT setval(pg_get_serial_sequence('Cafeteria_Inventory_Logs','log_id'),
+              (SELECT COUNT(*) FROM Cafeteria_Inventory_Logs));
+
+COMMIT;
+
+
+-- ================================================================
+-- VERIFICATION QUERIES
+-- Run these after seeding to confirm everything is consistent
+-- ================================================================
+
+-- ① Wallet ledger must sum to current_balance for every student
+--   Expected: discrepancy = 0.00 for all 10 rows
+SELECT
+    s.roll_number,
+    s.full_name,
+    s.current_balance                  AS stored_balance,
+    SUM(wl.amount)                     AS ledger_sum,
+    s.current_balance - SUM(wl.amount) AS discrepancy
+FROM Students s
+JOIN Wallet_Ledger wl ON s.student_id = wl.student_id
+GROUP BY s.student_id, s.roll_number, s.full_name, s.current_balance
+ORDER BY s.roll_number;
+
+-- ② Every cafeteria order total must match sum of its detail lines
+--   Expected: difference = 0.00 for all 15 rows
+SELECT
+    co.order_id,
+    co.total_amount                                              AS order_total,
+    SUM(cod.quantity_purchased * cod.unit_price_at_purchase)     AS detail_sum,
+    co.total_amount
+      - SUM(cod.quantity_purchased * cod.unit_price_at_purchase) AS difference
+FROM Cafeteria_Orders       co
+JOIN Cafeteria_Order_Details cod ON co.order_id = cod.order_id
+GROUP BY co.order_id, co.total_amount
+ORDER BY co.order_id;
+
+-- ③ Every bookshop order total must match sum of its detail lines
+--   Expected: difference = 0.00 for all 8 rows
+SELECT
+    bo.order_id,
+    bo.receipt_number,
+    bo.total_amount                                              AS order_total,
+    SUM(bod.quantity_purchased * bod.unit_price_at_purchase)     AS detail_sum,
+    bo.total_amount
+      - SUM(bod.quantity_purchased * bod.unit_price_at_purchase) AS difference
+FROM Bookshop_Orders       bo
+JOIN Bookshop_Order_Details bod ON bo.order_id = bod.order_id
+GROUP BY bo.order_id, bo.receipt_number, bo.total_amount
+ORDER BY bo.order_id;
+
+-- ④ Confirm the fraud-flagged session has no wallet credit
+--   Expected: 0 rows (no GAME_EARNING for session_id = 10)
+SELECT * FROM Wallet_Ledger WHERE game_session_id = 10;
+
+-- ⑤ Quick dashboard — should show all 10 students with correct balances
+SELECT roll_number, full_name, current_balance,
+       total_game_earnings, total_cafeteria_spend, total_bookshop_spend
+FROM vw_student_dashboard
+ORDER BY roll_number;
+
+-- ⑥ Leaderboard preview
+SELECT roll_number, full_name, game_name, total_score, total_cash_earned, game_rank
+FROM vw_esports_leaderboard
+ORDER BY game_name, game_rank
+LIMIT 15;
+
+-- ⑦ Fraud review — should show 1 row (Bilal, session 10, ×11.1 avg)
+SELECT roll_number, full_name, game_name, flagged_score,
+       student_avg_score, score_vs_avg_multiplier
+FROM (
+    WITH per_student_game_stats AS (
+        SELECT student_id, game_id,
+               ROUND(AVG(raw_score), 0) AS avg_processed_score,
+               MAX(raw_score)            AS max_processed_score,
+               COUNT(*)                  AS total_clean_sessions
+        FROM   Game_Sessions WHERE status = 'PROCESSED'
+        GROUP BY student_id, game_id
+    )
+    SELECT gs.session_id, s.roll_number, s.full_name, eg.game_name,
+           gs.raw_score AS flagged_score,
+           pss.avg_processed_score AS student_avg_score,
+           ROUND(gs.raw_score / NULLIF(pss.avg_processed_score, 0), 2) AS score_vs_avg_multiplier
+    FROM Game_Sessions gs
+    JOIN Students s ON gs.student_id = s.student_id
+    JOIN E_Sports_Games eg ON gs.game_id = eg.game_id
+    LEFT JOIN per_student_game_stats pss
+           ON pss.student_id = gs.student_id AND pss.game_id = gs.game_id
+    WHERE gs.status = 'REJECTED_SUSPICIOUS'
+) fraud_check;
+
+-- ⑧ Hamza's consecutive streak — should show streak_length_days = 3
+WITH daily_plays AS (
+    SELECT DISTINCT student_id, played_at::DATE AS play_date
+    FROM Game_Sessions WHERE status = 'PROCESSED'
+),
+island_groups AS (
+    SELECT student_id, play_date,
+           play_date - (ROW_NUMBER() OVER (PARTITION BY student_id ORDER BY play_date)
+                       * INTERVAL '1 day')::DATE AS island_key
+    FROM daily_plays
+),
+streaks AS (
+    SELECT student_id, MIN(play_date) AS streak_start, MAX(play_date) AS streak_end,
+           COUNT(*) AS streak_length_days
+    FROM island_groups GROUP BY student_id, island_key
+)
+SELECT s.roll_number, s.full_name, st.streak_start, st.streak_end, st.streak_length_days
+FROM streaks st JOIN Students s ON st.student_id = s.student_id
+ORDER BY streak_length_days DESC;
