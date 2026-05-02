@@ -1,5 +1,18 @@
 const { pool } = require('../config/db');
 
+const getMenu = async (req, res) => {
+    try {
+        const result = await pool.query(
+            "SELECT * FROM vw_cafeteria_inventory WHERE is_active = TRUE AND stock_status != 'OUT_OF_STOCK'"
+        );
+        res.status(200).json(result.rows);
+    }
+    catch (error) {
+        console.error('Menu fetch error:', error);
+        res.status(500).json({ error: 'Failed to fetch menu' });
+    }
+};
+
 const placeOrder = async (req, res) => {
     const { student_id, items } = req.body;
 
@@ -27,4 +40,4 @@ const placeOrder = async (req, res) => {
     }
 };
 
-module.exports = { placeOrder };
+module.exports = { placeOrder, getMenu };

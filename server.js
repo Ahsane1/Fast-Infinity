@@ -16,8 +16,8 @@ const { verifyToken } = require('./middleware/authMiddleware');
 const { loginStudent } = require('./controllers/authController');
 const { getStudentDashboard } = require('./controllers/dashboardController');
 const { recordSession } = require('./controllers/gameController');
-const { placeOrder } = require('./controllers/cafeteriaController');
-const { placeBookshopOrder } = require('./controllers/bookshopController');
+const { placeOrder, getMenu } = require('./controllers/cafeteriaController');
+const { placeBookshopOrder, getInventory } = require('./controllers/bookshopController');
 const { restockItem, adjustWallet } = require('./controllers/adminController');
 
 // ------------------
@@ -39,9 +39,11 @@ app.get('/api/dashboard/:id', verifyToken, getStudentDashboard);
 app.post('/api/games/session', verifyToken, recordSession);
 
 // Cafeteria Checkout Route (Protected)
+app.get('/api/cafeteria/menu', verifyToken, getMenu);
 app.post('/api/cafeteria/checkout', verifyToken, placeOrder);
 
 // Bookshop order Route (Protected)
+app.get('/api/bookshop/inventory', verifyToken, getInventory);
 app.post('/api/bookshop/checkout', verifyToken, placeBookshopOrder);
 
 // Restock item route (admin)

@@ -1,5 +1,18 @@
 const { pool } = require('../config/db');
 
+const getInventory = async (req, res) => {
+    try {
+        const result = await pool.query(
+            "SELECT * FROM vw_bookshop_inventory WHERE is_active = TRUE AND stock_status != 'OUT_OF_STOCK'"
+        );
+        res.status(200).json(result.rows);
+    }
+    catch (error) {
+        console.error('Bookshop inventory error:', error);
+        res.status(500).json({ error: 'Failed to fetch inventory' });
+    }
+};
+
 const placeBookshopOrder = async (req, res) => {
     // Extract student_id securely from the JWT token
     
@@ -37,4 +50,4 @@ const placeBookshopOrder = async (req, res) => {
     }
 };
 
-module.exports = { placeBookshopOrder };
+module.exports = { placeBookshopOrder, getInventory };

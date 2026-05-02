@@ -1,8 +1,10 @@
 import {BrowserRouter, Routes, Route } from 'react-router-dom';
 import Login from './pages/Login';
 import CampusLayout from './components/CampusLayout';
-
-const HubPlaceHolder = () => <div><h1 className="text-3xl font-bold">Welcome to the Campus Hub</h1><p className="mt-4 text-gray-400">Your dashboard data will load here.</p></div>;
+import Hub from './pages/Hub';
+import Cafeteria from './pages/Cafeteria';
+import ESports from './pages/ESports';
+import Bookshop from './pages/Bookshop';
 
 export default function App() {
     return (
@@ -13,8 +15,10 @@ export default function App() {
                 
                 {/* Protected Routes (Wrapped in the Layout) */}
                 <Route element={<CampusLayout />}>
-                    <Route path="/" element={<HubPlaceHolder />} />
-                    {/* We will add /cafeteria, /esports, and /bookshop here next */}
+                    <Route path="/" element={<Hub />} />
+                    <Route path="/cafeteria" element={<Cafeteria />} />
+                    <Route path="/esports" element={<ESports />} />
+                    <Route path="/bookshop" element={<Bookshop />} />
                 </Route>
             </Routes>
         </BrowserRouter>
