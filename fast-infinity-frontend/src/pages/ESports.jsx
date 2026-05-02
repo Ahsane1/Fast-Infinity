@@ -19,7 +19,10 @@ const GAMES = [
         name:        '2048',
         emoji:       '🟦',
         description: 'Slide and merge tiles to reach 2048. A perfect score-to-cash ratio.',
-        status:      'coming_soon',
+        status:      'available',
+        path:        '/esports/2048',
+        tag:         'Live',
+        tagCls:      'bg-green-900 text-green-300 border border-green-700',
     },
     {
         id:          'memory',

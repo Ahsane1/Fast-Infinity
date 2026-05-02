@@ -7,7 +7,6 @@ export default function History() {
   const [loading, setLoading] = useState(true);
   const [msg, setMsg] = useState({ text: '', type: '' });
   
-  // Bring in addBalance so the top-right wallet updates instantly!
   const addBalance = useStore((state) => state.addBalance);
 
   const fetchHistory = async () => {
@@ -30,26 +29,27 @@ export default function History() {
     try {
       const response = await axiosClient.post('/wallet/refund', { transaction_id });
       setMsg({ text: response.data.message, type: 'success' });
-      
-      // Instantly update the global wallet state
       addBalance(Math.abs(amount));
-      
-      // Refresh the table to show the new refund entry
-      fetchHistory();
+      fetchHistory(); // Refresh the table instantly
     } catch (err) {
-      setMsg({ 
-        text: err.response?.data?.error || 'Refund failed.', 
-        type: 'error' 
-      });
+      setMsg({ text: err.response?.data?.error || 'Refund failed.', type: 'error' });
     }
   };
 
-  // Helper to check if a transaction is older than 7 days
   const isPastOneWeek = (timestamp) => {
     const txDate = new Date(timestamp);
     const diffDays = Math.ceil(Math.abs(new Date() - txDate) / (1000 * 60 * 60 * 24));
     return diffDays > 7;
   };
+
+  // BULLETPROOF ID MATCHING: Find all order IDs that have a corresponding refund adjustment
+  const refundedCafeteriaIds = history
+    .filter(tx => tx.transaction_type === 'MANUAL_ADJUSTMENT' && tx.cafeteria_order_id)
+    .map(tx => tx.cafeteria_order_id);
+
+  const refundedBookshopReceipts = history
+    .filter(tx => tx.transaction_type === 'MANUAL_ADJUSTMENT' && tx.bookshop_receipt)
+    .map(tx => tx.bookshop_receipt);
 
   if (loading) return <div className="text-gray-400">Loading ledger...</div>;
 
@@ -85,7 +85,13 @@ export default function History() {
             ) : (
               history.map((tx) => {
                 const canRefund = (tx.transaction_type === 'CAFETERIA_SPEND' || tx.transaction_type === 'BOOKSHOP_SPEND');
-                const expired = isPastOneWeek(tx.transaction_timestamp);
+                
+                // Check if this specific row's ID exists in our array of refunded IDs
+                const isRefunded = 
+                  (tx.transaction_type === 'CAFETERIA_SPEND' && refundedCafeteriaIds.includes(tx.cafeteria_order_id)) ||
+                  (tx.transaction_type === 'BOOKSHOP_SPEND' && refundedBookshopReceipts.includes(tx.bookshop_receipt));
+                
+                const expired = !isRefunded && isPastOneWeek(tx.transaction_timestamp);
 
                 return (
                   <tr key={tx.transaction_id} className="hover:bg-gray-750 transition">
@@ -103,14 +109,16 @@ export default function History() {
                       {canRefund && (
                         <button 
                           onClick={() => handleRefund(tx.transaction_id, tx.amount)}
-                          disabled={expired}
+                          disabled={expired || isRefunded}
                           className={`px-3 py-1 text-xs font-bold rounded transition ${
-                            expired 
-                              ? 'bg-gray-700 text-gray-500 cursor-not-allowed' 
-                              : 'bg-red-900/50 text-red-400 border border-red-700 hover:bg-red-600 hover:text-white'
+                            isRefunded 
+                              ? 'bg-green-900 text-green-400 border border-green-700 cursor-not-allowed opacity-100'
+                              : expired 
+                                ? 'bg-gray-700 text-gray-500 cursor-not-allowed' 
+                                : 'bg-red-900/50 text-red-400 border border-red-700 hover:bg-red-600 hover:text-white'
                           }`}
                         >
-                          {expired ? 'Expired' : 'Refund'}
+                          {isRefunded ? 'Refunded' : expired ? 'Expired' : 'Refund'}
                         </button>
                       )}
                     </td>

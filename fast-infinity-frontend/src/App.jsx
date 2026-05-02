@@ -9,6 +9,7 @@ import Register from './pages/Register';
 import History from './pages/History';
 import Admin from './pages/Admin';
 import Snake from './pages/games/Snake';
+import Game2048 from './pages/games/2048';
 
 export default function App() {
     return (
@@ -24,6 +25,7 @@ export default function App() {
                     <Route path="/cafeteria" element={<Cafeteria />} />
                     <Route path="/esports" element={<ESports />} />
                     <Route path="/esports/snake" element={<Snake />} />
+                    <Route path="/esports/2048" element={<Game2048 />} />
                     <Route path="/bookshop" element={<Bookshop />} />
                     <Route path="/history" element={<History />} />
                     <Route path="/admin" element={<Admin />} />
