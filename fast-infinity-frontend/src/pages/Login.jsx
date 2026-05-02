@@ -1,5 +1,5 @@
 import { useState } from 'react';
-import { useNavigate } from 'react-router-dom';
+import { useNavigate, Link } from 'react-router-dom';
 import useStore from '../store/useStore';
 import axiosClient from '../api/axiosClient';
 
@@ -67,6 +67,9 @@ export default function Login() {
                         Enter Campus
                     </button>
                 </form>
+                <p className="mt-6 text-center text-sm text-gray-400">
+                    New to campus? <Link to="/register" className="text-blue-400 hover:text-blue-300">Register here</Link>
+                </p>
             </div>
         </div>
     );

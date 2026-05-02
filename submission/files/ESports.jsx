@@ -1,7 +1,5 @@
-import { useState } from 'react';
 import { useNavigate } from 'react-router-dom';
 import useStore from '../store/useStore';
-import axiosClient from '../api/axiosClient';
 
 const GAMES = [
     {
@@ -36,7 +34,6 @@ const GAMES = [
         status:      'coming_soon',
     },
 ];
-
 
 export default function ESports() {
     const { dashboard } = useStore();

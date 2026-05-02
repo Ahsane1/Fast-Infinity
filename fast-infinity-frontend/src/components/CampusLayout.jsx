@@ -16,6 +16,9 @@ export default function CampusLayout() {
     };
 
     const getLinkClass = (path) => {
+        const active = path === '/'
+            ? location.pathname === '/'
+            : location.pathname.startsWith(path);
         return `block p-3 rounded cursor-pointer transition ${
             location.pathname === path ? 'bg-blue-600 text-white font-bold' : 'bg-gray-800 text-gray-300 hover:bg-gray-700'
         }`;
@@ -31,6 +34,20 @@ export default function CampusLayout() {
                     <Link to="/cafeteria" className={getLinkClass('/cafeteria')}>Cafeteria</Link>
                     <Link to="/esports" className={getLinkClass('/esports')}>E-Sports Center</Link>
                     <Link to="/bookshop" className={getLinkClass('/bookshop')}>Bookshop</Link>
+                    <Link to="/history" className={getLinkClass('/history')}>Transaction History</Link>
+
+                    {dashboard?.roll_number === '24L-0561' && (
+                        <Link
+                            to="/admin"
+                            className={`block p-3 rounded cursor-pointer transition mt-8 ${
+                                location.pathname === '/admin'
+                                    ? 'bg-red-600 text-white font-bold'
+                                    : 'bg-red-900/20 text-red-400 hover:bg-red-900/40 border border-red-900/50'
+                            }`}
+                        >
+                            Admin Terminal
+                        </Link>
+                    )}
                 </nav>
             </div>
             

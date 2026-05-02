@@ -49,4 +49,30 @@ const loginStudent = async (req, res) => {
     }
 };
 
-module.exports = { loginStudent };
+const registerStudent = async (req, res) => {
+    const { roll_number, full_name, password } = req.body;
+
+    if (!roll_number || !full_name || !password) {
+        return res.status(400).json({ error: 'Roll number, full name, and password are required' });
+    }
+
+    try {
+        // Passing the raw password since bcrypt is disabled in login anyway
+        await pool.query(
+            'CALL sp_register_student($1, $2, $3, $4)', 
+            [roll_number, full_name, password, 0.00]
+        );
+
+        res.status(201).json({ message: 'Registration successful! You can now log in.' });
+    } catch (error) {
+        console.error('Registration error:', error.message);
+        
+        // Catch PostgreSQL duplicate key error
+        if (error.message.includes('DUPLICATE_ROLL') || error.code === '23505') {
+            return res.status(409).json({ error: 'This roll number is already registered.' });
+        }
+        res.status(500).json({ error: 'Failed to register student.' });
+    }
+};
+
+module.exports = { loginStudent, registerStudent };

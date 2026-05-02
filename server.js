@@ -13,12 +13,13 @@ app.use(express.json());
 const { verifyToken } = require('./middleware/authMiddleware');
 
 // Import controllers
-const { loginStudent } = require('./controllers/authController');
+const { loginStudent, registerStudent } = require('./controllers/authController');
 const { getStudentDashboard } = require('./controllers/dashboardController');
 const { recordSession } = require('./controllers/gameController');
 const { placeOrder, getMenu } = require('./controllers/cafeteriaController');
 const { placeBookshopOrder, getInventory } = require('./controllers/bookshopController');
 const { restockItem, adjustWallet } = require('./controllers/adminController');
+const { getTransactionHistory, processRefund } = require('./controllers/walletController');
 
 // ------------------
 // --- API ROUTES ---
@@ -31,6 +32,7 @@ app.get('/api/health', (req, res) => {
 
 // Authentication route (public)
 app.post('/api/auth/login', loginStudent);
+app.post('/api/auth/register', registerStudent);
 
 // Student Dashboard Route (Protected)
 app.get('/api/dashboard/:id', verifyToken, getStudentDashboard);
@@ -49,6 +51,8 @@ app.post('/api/bookshop/checkout', verifyToken, placeBookshopOrder);
 // Restock item route (admin)
 app.post('/api/admin/restock', verifyToken, restockItem);
 app.post('/api/admin/wallet', verifyToken, adjustWallet);
+app.get('/api/wallet/history', verifyToken, getTransactionHistory);
+app.post('/api/wallet/refund', verifyToken, processRefund);
 
 // ------------------------
 // --- SERVER BOOTSTRAP ---
