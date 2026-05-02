@@ -7,6 +7,9 @@ export default function History() {
   const [loading, setLoading] = useState(true);
   const [msg, setMsg] = useState({ text: '', type: '' });
   
+  // New State for our Date Filter
+  const [filter, setFilter] = useState('ALL'); 
+  
   const addBalance = useStore((state) => state.addBalance);
 
   const fetchHistory = async () => {
@@ -42,7 +45,7 @@ export default function History() {
     return diffDays > 7;
   };
 
-  // BULLETPROOF ID MATCHING: Find all order IDs that have a corresponding refund adjustment
+  // BULLETPROOF ID MATCHING
   const refundedCafeteriaIds = history
     .filter(tx => tx.transaction_type === 'MANUAL_ADJUSTMENT' && tx.cafeteria_order_id)
     .map(tx => tx.cafeteria_order_id);
@@ -50,6 +53,22 @@ export default function History() {
   const refundedBookshopReceipts = history
     .filter(tx => tx.transaction_type === 'MANUAL_ADJUSTMENT' && tx.bookshop_receipt)
     .map(tx => tx.bookshop_receipt);
+
+  // --- FILTERING LOGIC ---
+  const getFilteredHistory = () => {
+    const now = new Date();
+    if (filter === '7DAYS') {
+      const oneWeekAgo = new Date(now.getTime() - 7 * 24 * 60 * 60 * 1000);
+      return history.filter(tx => new Date(tx.transaction_timestamp) >= oneWeekAgo);
+    }
+    if (filter === '30DAYS') {
+      const thirtyDaysAgo = new Date(now.getTime() - 30 * 24 * 60 * 60 * 1000);
+      return history.filter(tx => new Date(tx.transaction_timestamp) >= thirtyDaysAgo);
+    }
+    return history;
+  };
+
+  const displayedHistory = getFilteredHistory();
 
   if (loading) return <div className="text-gray-400">Loading ledger...</div>;
 
@@ -68,6 +87,31 @@ export default function History() {
         </div>
       )}
 
+      {/* FILTER CONTROLS */}
+      <div className="flex items-center space-x-3 mb-4">
+        <span className="text-sm font-bold text-gray-400 uppercase tracking-wider">Filter By Date:</span>
+        <div className="flex space-x-2 bg-gray-800 p-1 rounded-lg border border-gray-700">
+          <button 
+            onClick={() => setFilter('ALL')}
+            className={`px-4 py-1.5 text-sm font-bold rounded-md transition ${filter === 'ALL' ? 'bg-blue-600 text-white' : 'text-gray-400 hover:text-white hover:bg-gray-700'}`}
+          >
+            All Time
+          </button>
+          <button 
+            onClick={() => setFilter('7DAYS')}
+            className={`px-4 py-1.5 text-sm font-bold rounded-md transition ${filter === '7DAYS' ? 'bg-blue-600 text-white' : 'text-gray-400 hover:text-white hover:bg-gray-700'}`}
+          >
+            Last 7 Days
+          </button>
+          <button 
+            onClick={() => setFilter('30DAYS')}
+            className={`px-4 py-1.5 text-sm font-bold rounded-md transition ${filter === '30DAYS' ? 'bg-blue-600 text-white' : 'text-gray-400 hover:text-white hover:bg-gray-700'}`}
+          >
+            Last 30 Days
+          </button>
+        </div>
+      </div>
+
       <div className="overflow-hidden rounded-xl border border-gray-700 bg-gray-800">
         <table className="w-full text-left text-sm text-gray-300">
           <thead className="bg-gray-900 text-xs uppercase text-gray-400">
@@ -80,13 +124,12 @@ export default function History() {
             </tr>
           </thead>
           <tbody className="divide-y divide-gray-700">
-            {history.length === 0 ? (
-              <tr><td colSpan="5" className="p-6 text-center text-gray-500">No transactions found.</td></tr>
+            {displayedHistory.length === 0 ? (
+              <tr><td colSpan="5" className="p-6 text-center text-gray-500">No transactions found for this time period.</td></tr>
             ) : (
-              history.map((tx) => {
+              displayedHistory.map((tx) => {
                 const canRefund = (tx.transaction_type === 'CAFETERIA_SPEND' || tx.transaction_type === 'BOOKSHOP_SPEND');
                 
-                // Check if this specific row's ID exists in our array of refunded IDs
                 const isRefunded = 
                   (tx.transaction_type === 'CAFETERIA_SPEND' && refundedCafeteriaIds.includes(tx.cafeteria_order_id)) ||
                   (tx.transaction_type === 'BOOKSHOP_SPEND' && refundedBookshopReceipts.includes(tx.bookshop_receipt));

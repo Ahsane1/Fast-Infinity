@@ -10,6 +10,10 @@ import History from './pages/History';
 import Admin from './pages/Admin';
 import Snake from './pages/games/Snake';
 import Game2048 from './pages/games/2048';
+import Tetris from './pages/games/Tetris';
+import ReactionTap from './pages/games/ReactionTap';
+import FlappyBird from './pages/games/FlappyBird';
+import MathBlaster from './pages/games/MathBlaster';
 
 export default function App() {
     return (
@@ -26,6 +30,10 @@ export default function App() {
                     <Route path="/esports" element={<ESports />} />
                     <Route path="/esports/snake" element={<Snake />} />
                     <Route path="/esports/2048" element={<Game2048 />} />
+                    <Route path="/esports/tetris" element={<Tetris />} />
+                    <Route path="/esports/reaction" element={<ReactionTap />} />
+                    <Route path="/esports/flappy" element={<FlappyBird />} />
+                    <Route path="/esports/math" element={<MathBlaster />} />
                     <Route path="/bookshop" element={<Bookshop />} />
                     <Route path="/history" element={<History />} />
                     <Route path="/admin" element={<Admin />} />
