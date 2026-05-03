@@ -20,6 +20,7 @@ The entire frontend has been meticulously designed using modern UI/UX principles
 ![Bookshop Screenshot](assets/bookshop.png)
 ![Ledger Screenshot](assets/ledger.png)
 ![Admin Screenshot](assets/admin.png)
+![Team Screenshot](assets/team.png)
 
 ### 🎮 The E-Sports Arcade
 Students can earn virtual campus cash by playing actual, fully integrated mini-games. The system logs raw scores, calculates payouts, and updates the global wallet state instantly.
