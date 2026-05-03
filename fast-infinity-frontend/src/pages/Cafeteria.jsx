@@ -2,10 +2,18 @@ import { useEffect, useState } from 'react';
 import useStore from '../store/useStore';
 import axiosClient from '../api/axiosClient';
 
+
+
 const ADMIN_ROLL_NUMBERS = ['24L-0561', '24L-3062', '24L-0556']; // Example admin roll numbers
 
 const CAFETERIA_CATEGORIES = ['Meals', 'Snacks', 'Drinks', 'Desserts', 'Breakfast', 'Other'];
 
+const formatRs = (amount) => {
+    return Number(amount || 0).toLocaleString('en-US', {
+        minimumFractionDigits: 2,
+        maximumFractionDigits: 2
+    });
+};
 // ── Add Item Modal ────────────────────────────────────────────────────────────
 function AddCafeteriaItemModal({ onClose, onAdded }) {
     const [form, setForm] = useState({
@@ -244,7 +252,7 @@ export default function Cafeteria() {
                                 <div>
                                     <div className="flex justify-between">
                                         <h3 className="font-bold text-white">{item.item_name}</h3>
-                                        <span className="font-semibold text-green-400 whitespace-nowrap">Rs. {item.price}</span>
+                                        <span className="font-semibold text-green-400 whitespace-nowrap">Rs. {formatRs(item.price)}</span>
                                     </div>
                                     <p className="mt-1 text-xs text-gray-500 uppercase tracking-wider">{item.category}</p>
                                     {item.description && <p className="mt-1 text-sm text-gray-400">{item.description}</p>}
@@ -269,7 +277,7 @@ export default function Cafeteria() {
                             <div key={item.item_id} className="flex items-center justify-between">
                                 <div>
                                     <p className="text-sm text-white">{item.item_name} (x{item.quantity})</p>
-                                    <p className="text-xs text-gray-400">Rs. {item.price * item.quantity}</p>
+                                    <p className="text-xs text-gray-400">Rs. {formatRs(item.price * item.quantity)}</p>
                                 </div>
                                 <button onClick={() => removeFromCart(item.item_id)} className="text-red-400 text-xs hover:text-red-300">Remove</button>
                             </div>
@@ -278,7 +286,7 @@ export default function Cafeteria() {
                     <div className="mt-4 pt-4 border-t border-gray-700">
                         <div className="flex justify-between mb-4">
                             <span className="text-gray-400">Total:</span>
-                            <span className="font-bold text-green-400 text-xl">Rs. {cartTotal.toFixed(2)}</span>
+                            <span className="font-bold text-green-400 text-xl">Rs. {formatRs(cartTotal)}</span>
                         </div>
                         <button onClick={handleCheckout} disabled={cart.length === 0}
                             className={`w-full rounded py-3 font-bold text-white transition ${cart.length === 0 ? 'bg-gray-600 cursor-not-allowed' : 'bg-green-600 hover:bg-green-500'}`}>

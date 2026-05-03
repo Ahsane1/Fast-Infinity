@@ -1,15 +1,26 @@
-import { useEffect } from 'react';
+import { useEffect, useState } from 'react';
 import { Navigate, Outlet, Link, useNavigate, useLocation } from 'react-router-dom';
 import useStore from '../store/useStore';
 import axiosClient from '../api/axiosClient';
 
+const ADMIN_ROLL_NUMBERS = ['24L-0561', '24L-3062', '24L-0556'];
+
+const formatRs = (amount) => {
+    return Number(amount || 0).toLocaleString('en-US', {
+        minimumFractionDigits: 2,
+        maximumFractionDigits: 2
+    });
+};
+
 export default function CampusLayout() {
-    // Added user and setDashboardData here
+    // Removed 'theme' and 'toggleTheme' from useStore extraction
     const { token, user, dashboard, logout, setDashboardData } = useStore();
     const navigate = useNavigate();
     const location = useLocation();
 
-    // The Reload Fix: globally fetches wallet data if missing on refresh
+    // State to control the wallet modal visibility
+    const [isWalletOpen, setIsWalletOpen] = useState(false);
+
     useEffect(() => {
         if (token && user?.id && !dashboard) {
             const fetchDashboard = async () => {
@@ -37,63 +48,160 @@ export default function CampusLayout() {
         const active = path === '/'
             ? location.pathname === '/'
             : location.pathname.startsWith(path);
-        return `block p-3 rounded cursor-pointer transition ${
-            active ? 'bg-blue-600 text-white font-bold' : 'bg-gray-800 text-gray-300 hover:bg-gray-700'
+            
+        return `px-4 py-2 rounded-full text-sm font-semibold transition ${
+            active 
+                ? 'bg-white/20 text-white shadow-inner' 
+                : 'text-gray-300 hover:bg-white/10 hover:text-white'
         }`;
     };
 
-    return (
-        <div className="flex h-screen w-screen bg-gray-900 text-white overflow-hidden">
-            {/* Sidebar */}
-            <div className="w-64 border-r border-gray-800 bg-gray-950 p-6 flex flex-col">
-                <h2 className="text-2xl font-bold text-blue-500 mb-10 tracking-widest">FAST Infinity</h2>
-                <nav className="flex-1 space-y-4">
-                    <Link to="/" className={getLinkClass('/')}>Campus Hub</Link>
-                    <Link to="/cafeteria" className={getLinkClass('/cafeteria')}>Cafeteria</Link>
-                    <Link to="/esports" className={getLinkClass('/esports')}>E-Sports Center</Link>
-                    <Link to="/bookshop" className={getLinkClass('/bookshop')}>Bookshop</Link>
-                    <Link to="/history" className={getLinkClass('/history')}>Transaction History</Link>
+    const totalSpend = (parseFloat(formatRs(dashboard?.total_cafeteria_spend || 0)) + parseFloat(formatRs(dashboard?.total_bookshop_spend || 0))).toFixed(2);
 
-                    {/* Your exact multi-admin check */}
-                    {['24L-0561', '24L-3062', '24L-0556'].includes(dashboard?.roll_number) && (
+    return (
+        // Locked to the dark gradient background
+        <div className="flex h-screen w-screen flex-col overflow-hidden bg-gradient-to-br from-gray-900 via-indigo-950 to-slate-900 text-white relative">
+            
+            {/* The Glassmorphic Wallet Modal */}
+            {isWalletOpen && (
+                <div className="fixed inset-0 z-[100] flex items-center justify-center p-4">
+                    {/* Dimmed Background Overlay */}
+                    <div 
+                        className="absolute inset-0 bg-black/40 backdrop-blur-sm transition-opacity"
+                        onClick={() => setIsWalletOpen(false)}
+                    ></div>
+
+                    {/* The Glass Wallet Card */}
+                    <div className="relative w-full max-w-sm overflow-hidden rounded-[2.5rem] border border-white/10 bg-gray-900/60 p-6 shadow-[0_8px_32px_0_rgba(0,0,0,0.5)] backdrop-blur-2xl transition-all">
+                        
+                        {/* Ambient Glow Blobs */}
+                        <div className="absolute -right-10 -top-10 h-40 w-40 rounded-full bg-cyan-500/20 blur-3xl"></div>
+                        <div className="absolute -bottom-10 -left-10 h-40 w-40 rounded-full bg-indigo-500/20 blur-3xl"></div>
+
+                        {/* Modal Header */}
+                        <div className="relative z-10 mb-6 flex items-center justify-between">
+                            <h3 className="text-lg font-medium text-gray-200">Digital Wallet</h3>
+                            <button onClick={() => setIsWalletOpen(false)} className="text-gray-400 hover:text-white transition">
+                                ✕
+                            </button>
+                        </div>
+
+                        <div className="relative z-10 space-y-4">
+                            {/* User Info Row */}
+                            <div className="flex items-center space-x-4 mb-2">
+                                <div className="flex h-12 w-12 items-center justify-center rounded-full bg-gradient-to-br from-cyan-400 to-blue-600 text-xl font-bold text-white shadow-inner">
+                                    {(user?.name || dashboard?.full_name || 'S').charAt(0).toUpperCase()}
+                                </div>
+                                <div>
+                                    <p className="text-lg font-bold text-white">{user?.name || dashboard?.full_name}</p>
+                                    <p className="font-mono text-xs text-gray-400">{dashboard?.roll_number}</p>
+                                </div>
+                            </div>
+
+                            {/* Available Cash Panel */}
+                            <div className="rounded-3xl border border-white/5 bg-black/20 p-5">
+                                <p className="mb-1 text-[10px] font-bold uppercase tracking-widest text-gray-400">Available Balance</p>
+                                <div className="flex items-end justify-between">
+                                    <div className="flex items-center space-x-3">
+                                        <div className="flex h-10 w-10 items-center justify-center rounded-full bg-green-500/20 text-xl">
+                                            👛
+                                        </div>
+                                        <span className="text-3xl font-black text-white">
+                                            Rs. {formatRs(dashboard?.current_balance || user?.balance)}
+                                        </span>
+                                    </div>
+                                </div>
+                            </div>
+
+                            {/* Total Spend Panel */}
+                            <div className="rounded-3xl border border-white/5 bg-black/20 p-5">
+                                <p className="mb-1 text-[10px] font-bold uppercase tracking-widest text-gray-400">Total Campus Spend</p>
+                                <div className="flex items-end justify-between">
+                                    <div className="flex items-center space-x-3">
+                                        <div className="flex h-10 w-10 items-center justify-center rounded-full bg-red-500/10 text-xl">
+                                            💸
+                                        </div>
+                                        <span className="text-2xl font-bold text-gray-300">
+                                            Rs. {formatRs(totalSpend)}
+                                        </span>
+                                    </div>
+                                </div>
+                                <div className="mt-3 flex justify-between text-xs text-gray-400 font-medium">
+                                    <span>Cafeteria: Rs. {formatRs(dashboard?.total_cafeteria_spend)}</span>
+                                    <span>Bookshop: Rs. {formatRs(dashboard?.total_bookshop_spend)}</span>
+                                </div>
+                            </div>
+
+                            {/* Action Button */}
+                            <button 
+                                onClick={() => { setIsWalletOpen(false); navigate('/history'); }}
+                                className="mt-2 w-full rounded-2xl py-3.5 text-sm font-bold shadow-lg transition active:scale-[0.98] border border-white/10 bg-white/10 text-white hover:bg-white/20"
+                            >
+                                View Full Ledger
+                            </button>
+                        </div>
+                    </div>
+                </div>
+            )}
+
+            {/* Floating Glass Header */}
+            <header className="fixed inset-x-6 top-6 z-50 flex h-16 items-center justify-between rounded-full border border-white/20 bg-white/10 px-6 py-2 shadow-[0_8px_32px_0_rgba(0,0,0,0.3)] backdrop-blur-lg">
+                
+                <div className="flex items-center space-x-2">
+                    <div className="flex h-10 w-10 items-center justify-center rounded-full bg-gradient-to-br from-cyan-400 to-blue-600 font-black text-white shadow-lg">
+                        FI
+                    </div>
+                    <span className="hidden text-xl font-bold tracking-widest text-white md:block">
+                        FAST<span className="text-cyan-400">INFINITY</span>
+                    </span>
+                </div>
+
+                <nav className="hidden items-center space-x-1 lg:flex">
+                    <Link to="/" className={getLinkClass('/')}>Hub</Link>
+                    <Link to="/cafeteria" className={getLinkClass('/cafeteria')}>Cafeteria</Link>
+                    <Link to="/esports" className={getLinkClass('/esports')}>E-Sports</Link>
+                    <Link to="/bookshop" className={getLinkClass('/bookshop')}>Bookshop</Link>
+                    <Link to="/history" className={getLinkClass('/history')}>Ledger</Link>
+
+                    {ADMIN_ROLL_NUMBERS.includes(dashboard?.roll_number) && (
                         <Link
                             to="/admin"
-                            className={`block p-3 rounded cursor-pointer transition mt-8 ${
+                            className={`ml-2 rounded-full px-4 py-2 text-sm font-bold transition ${
                                 location.pathname === '/admin'
-                                    ? 'bg-red-600 text-white font-bold'
-                                    : 'bg-red-900/20 text-red-400 hover:bg-red-900/40 border border-red-900/50'
+                                    ? 'border border-red-500/50 bg-red-500/40 text-white'
+                                    : 'border border-transparent bg-red-500/10 text-red-300 hover:bg-red-500/20'
                             }`}
                         >
-                            Admin Terminal
+                            Admin
                         </Link>
                     )}
                 </nav>
-            </div>
-            
-            {/* Main Content Area */}
-            <div className="flex flex-1 flex-col">
-                {/* Topbar */}
-                <header className="h-16 border-b border-gray-800 bg-gray-950 flex items-center justify-between px-8">
-                    <span className="text-gray-400 capitalize">Location: {location.pathname === '/' ? 'Hub' : location.pathname.substring(1)}</span>
-                    <div className="flex items-center space-x-4">
-                        {/* Fallback to user?.balance to prevent 0.00 flash during load */}
-                        <span className="font-bold text-green-400 text-lg">
-                            Wallet: Rs. {dashboard?.current_balance || user?.balance || '0.00'}
+
+                <div className="flex items-center space-x-3">
+                    {/* Clickable Wallet Pill */}
+                    <button 
+                        onClick={() => setIsWalletOpen(true)}
+                        className="flex items-center space-x-2 rounded-full border border-green-400/30 bg-green-500/10 px-4 py-1.5 shadow-inner transition hover:bg-green-500/20"
+                    >
+                        <span className="text-lg">👛</span>
+                        <span className="text-sm font-bold text-green-300">
+                            Rs. {formatRs(dashboard?.current_balance || user?.balance)}
                         </span>
-                        <button
-                            onClick={handleLogout}
-                            className="text-sm text-red-400 hover:text-red-300"
-                        >
-                            Logout
-                        </button>
-                    </div>
-                </header>
-                
-                {/* Page Content */}
-                <main className="flex-1 overflow-y-auto p-8">
-                    <Outlet />
-                </main>
-            </div>
+                    </button>
+
+                    <button
+                        onClick={handleLogout}
+                        className="rounded-full border border-red-400/30 bg-red-500/10 px-4 py-1.5 text-sm font-bold text-red-300 transition hover:bg-red-500/20 hover:text-red-200"
+                    >
+                        Logout
+                    </button>
+                </div>
+            </header>
+            
+            <main className="flex-1 overflow-y-auto px-8 pb-8 pt-32">
+                <Outlet />
+            </main>
+            
         </div>
     );
 }

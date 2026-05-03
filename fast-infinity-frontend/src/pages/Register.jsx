@@ -36,59 +36,73 @@ export default function Register() {
   };
 
   return (
-    <div className="flex h-screen w-screen items-center justify-center bg-gray-900">
-      <div className="w-full max-w-md rounded-xl bg-gray-800 p-8 shadow-2xl">
-        <h1 className="mb-6 text-center text-3xl font-bold text-white">Enroll Now</h1>
-        <p className="mb-8 text-center text-gray-400">Join the FAST Infinity Campus</p>
+    <div className="flex h-screen w-screen items-center justify-center bg-gradient-to-br from-gray-900 via-indigo-950 to-slate-900">
+      
+      {/* The Glass Card */}
+      <div className="w-full max-w-md rounded-3xl border border-white/20 bg-white/10 p-10 shadow-[0_8px_32px_0_rgba(0,0,0,0.3)] backdrop-blur-lg">
         
-        {error && <div className="mb-4 rounded bg-red-500/20 p-3 text-red-400 border border-red-500/50">{error}</div>}
-        {success && <div className="mb-4 rounded bg-green-500/20 p-3 text-green-400 border border-green-500/50">{success}</div>}
+        <h1 className="mb-2 text-center text-3xl font-bold text-white tracking-wide">Enroll Now</h1>
+        <p className="mb-8 text-center text-sm text-gray-300">Join the FAST INIFINITY</p>
         
-        <form onSubmit={handleRegister} className="space-y-6">
+        {error && (
+            <div className="mb-6 rounded-xl bg-red-500/20 p-3 text-sm text-red-300 border border-red-500/30 backdrop-blur-md text-center">
+                {error}
+            </div>
+        )}
+        {success && (
+            <div className="mb-6 rounded-xl bg-green-500/20 p-3 text-sm text-green-300 border border-green-500/30 backdrop-blur-md text-center">
+                {success}
+            </div>
+        )}
+        
+        <form onSubmit={handleRegister} className="space-y-5">
           <div>
-            <label className="block text-sm font-medium text-gray-300">Roll Number</label>
+            <label className="block text-sm font-medium text-gray-200 mb-1.5">Roll Number</label>
             <input 
               type="text" 
               value={rollNumber}
               onChange={(e) => setRollNumber(e.target.value)}
-              className="mt-1 w-full rounded-lg border border-gray-600 bg-gray-700 p-3 text-white focus:border-blue-500 focus:outline-none"
+              className="w-full rounded-xl border border-white/10 bg-black/20 p-3.5 text-white placeholder-gray-500 outline-none transition focus:border-cyan-400/50 focus:bg-black/40"
               placeholder="e.g. 24L-9999"
               required 
             />
           </div>
+          
           <div>
-            <label className="block text-sm font-medium text-gray-300">Full Name</label>
+            <label className="block text-sm font-medium text-gray-200 mb-1.5">Full Name</label>
             <input 
               type="text" 
               value={fullName}
               onChange={(e) => setFullName(e.target.value)}
-              className="mt-1 w-full rounded-lg border border-gray-600 bg-gray-700 p-3 text-white focus:border-blue-500 focus:outline-none"
+              className="w-full rounded-xl border border-white/10 bg-black/20 p-3.5 text-white placeholder-gray-500 outline-none transition focus:border-cyan-400/50 focus:bg-black/40"
               placeholder="e.g. Ahmed Khan"
               required 
             />
           </div>
+          
           <div>
-            <label className="block text-sm font-medium text-gray-300">Password</label>
+            <label className="block text-sm font-medium text-gray-200 mb-1.5">Password</label>
             <input 
               type="password" 
               value={password}
               onChange={(e) => setPassword(e.target.value)}
-              className="mt-1 w-full rounded-lg border border-gray-600 bg-gray-700 p-3 text-white focus:border-blue-500 focus:outline-none"
+              className="w-full rounded-xl border border-white/10 bg-black/20 p-3.5 text-white placeholder-gray-500 outline-none transition focus:border-cyan-400/50 focus:bg-black/40"
               placeholder="••••••••"
               required 
             />
           </div>
+          
           <button 
             type="submit" 
             disabled={loading || success}
-            className="w-full rounded-lg bg-green-600 p-3 font-bold text-white transition hover:bg-green-500 disabled:opacity-50"
+            className="mt-4 w-full rounded-xl bg-gradient-to-r from-cyan-400 to-blue-600 p-3.5 font-bold text-white shadow-lg transition hover:from-cyan-300 hover:to-blue-500 hover:shadow-cyan-500/25 active:scale-[0.98] disabled:opacity-50 disabled:cursor-not-allowed"
           >
             {loading ? 'Registering...' : 'Complete Enrollment'}
           </button>
         </form>
 
-        <p className="mt-6 text-center text-sm text-gray-400">
-          Already have an account? <Link to="/login" className="text-blue-400 hover:text-blue-300">Login here</Link>
+        <p className="mt-8 text-center text-sm text-gray-300">
+          Already have an account? <Link to="/login" className="font-semibold text-cyan-400 hover:text-cyan-300 transition">Login here</Link>
         </p>
       </div>
     </div>

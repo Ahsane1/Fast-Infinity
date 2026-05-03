@@ -6,6 +6,12 @@ const ADMIN_ROLLNUMBERS = ['24L-0561', '24L-3062', '24L-0556']; // Admin rollnum
 
 const BOOKSHOP_CATEGORIES = ['TEXTBOOK', 'STATIONERY', 'ELECTRONICS', 'MERCHANDISE', 'OTHER'];
 
+const formatRs = (amount) => {
+    return Number(amount || 0).toLocaleString('en-US', {
+        minimumFractionDigits: 2,
+        maximumFractionDigits: 2
+    });
+};
 // ── Add Item Modal ────────────────────────────────────────────────────────────
 function AddBookshopItemModal({ onClose, onAdded }) {
     const [form, setForm] = useState({
@@ -107,7 +113,7 @@ function AddBookshopItemModal({ onClose, onAdded }) {
                         <div>
                             <label className="block text-sm text-gray-400 mb-1">Price (Rs.) <span className="text-red-400">*</span></label>
                             <input
-                                type="number" required min="0.01" step="0.01" value={form.price}
+                                type="number" required min="0.01" step="0.01" value={formatRs(form.price)}
                                 onChange={e => set('price', e.target.value)}
                                 placeholder="e.g. 1200"
                                 className="w-full rounded-lg bg-gray-800 border border-gray-700 focus:border-blue-500 p-3 text-white outline-none transition"
@@ -116,7 +122,7 @@ function AddBookshopItemModal({ onClose, onAdded }) {
                         <div>
                             <label className="block text-sm text-gray-400 mb-1">Stock Qty <span className="text-red-400">*</span></label>
                             <input
-                                type="number" required min="0" step="1" value={form.stock_quantity}
+                                type="number" required min="0" step="1" value={formatRs(form.stock_quantity)}
                                 onChange={e => set('stock_quantity', e.target.value)}
                                 placeholder="e.g. 30"
                                 className="w-full rounded-lg bg-gray-800 border border-gray-700 focus:border-blue-500 p-3 text-white outline-none transition"

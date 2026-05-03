@@ -66,6 +66,12 @@ const GAMES = [
     },
 ];
 
+const formatRs = (amount) => {
+    return Number(amount || 0).toLocaleString('en-US', {
+        minimumFractionDigits: 2,
+        maximumFractionDigits: 2
+    });
+};
 
 export default function ESports() {
     const { dashboard } = useStore();
@@ -87,13 +93,13 @@ export default function ESports() {
                 <div>
                     <p className="text-sm text-gray-400">Total Game Earnings</p>
                     <p className="text-2xl font-bold text-blue-400">
-                        Rs. {dashboard?.total_game_earnings || '0.00'}
+                        Rs. {formatRs(dashboard?.total_game_earnings || '0.00')}
                     </p>
                 </div>
                 <div className="text-right">
                     <p className="text-sm text-gray-400">Sessions Played</p>
                     <p className="text-2xl font-bold text-white">
-                        {dashboard?.total_game_sessions || 0}
+                        {formatRs(dashboard?.total_game_sessions || 0)}
                     </p>
                 </div>
             </div>

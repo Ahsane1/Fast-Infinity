@@ -2,6 +2,13 @@ import { useEffect, useState } from 'react';
 import axiosClient from '../api/axiosClient';
 import useStore from '../store/useStore';
 
+const formatRs = (amount) => {
+    return Number(amount || 0).toLocaleString('en-US', {
+        minimumFractionDigits: 2,
+        maximumFractionDigits: 2
+    });
+  };
+
 export default function History() {
   const [history, setHistory] = useState([]);
   const [loading, setLoading] = useState(true);
