@@ -11,13 +11,31 @@ const getSavedUser = () => {
 };
 
 const useStore = create((set) => ({
-
     // Initialize with data from localStorage instead of null
     user: getSavedUser(),
     token: localStorage.getItem('token') || null,
-
     dashboard: null,
 
+    // --- THEME STATE & LOGIC ---
+    // Pull theme from localStorage; default to 'dark'
+    theme: localStorage.getItem('theme') || 'dark', 
+
+    toggleTheme: () => set((state) => {
+        const newTheme = state.theme === 'dark' ? 'light' : 'dark';
+        localStorage.setItem('theme', newTheme);
+        
+        // Anti-flicker manual DOM injection
+        // This ensures the theme swap is immediate across the entire app
+        if (newTheme === 'dark') {
+            document.documentElement.classList.add('dark');
+        } else {
+            document.documentElement.classList.remove('dark');
+        }
+        
+        return { theme: newTheme };
+    }),
+
+    // --- AUTH ACTIONS ---
     login: (userData, token) => {
         // Save BOTH token and user data to localStorage
         localStorage.setItem('token', token);
@@ -34,6 +52,7 @@ const useStore = create((set) => ({
         set({ user: null, token: null, dashboard: null });
     },
 
+    // --- DASHBOARD ACTIONS ---
     setDashboardData: (data) => set({ dashboard: data }),
 
     deductBalance: (amount) => set((state) => ({

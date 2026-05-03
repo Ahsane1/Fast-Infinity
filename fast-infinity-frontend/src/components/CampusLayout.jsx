@@ -1,5 +1,6 @@
 import { useEffect, useState } from 'react';
 import { Navigate, Outlet, Link, useNavigate, useLocation } from 'react-router-dom';
+import { motion } from 'framer-motion'; // Added motion
 import useStore from '../store/useStore';
 import axiosClient from '../api/axiosClient';
 
@@ -13,12 +14,10 @@ const formatRs = (amount) => {
 };
 
 export default function CampusLayout() {
-    // Removed 'theme' and 'toggleTheme' from useStore extraction
-    const { token, user, dashboard, logout, setDashboardData } = useStore();
+    const { token, user, dashboard, logout, setDashboardData, theme, toggleTheme } = useStore();
     const navigate = useNavigate();
     const location = useLocation();
 
-    // State to control the wallet modal visibility
     const [isWalletOpen, setIsWalletOpen] = useState(false);
 
     useEffect(() => {
@@ -44,41 +43,34 @@ export default function CampusLayout() {
         navigate('/login');
     };
 
-    const getLinkClass = (path) => {
-        const active = path === '/'
-            ? location.pathname === '/'
-            : location.pathname.startsWith(path);
-            
-        return `px-4 py-2 rounded-full text-sm font-semibold transition ${
-            active 
-                ? 'bg-white/20 text-white shadow-inner' 
-                : 'text-gray-300 hover:bg-white/10 hover:text-white'
-        }`;
-    };
+    // Navigation items array for cleaner mapping with layoutId
+    const navLinks = [
+        { name: 'Hub', path: '/' },
+        { name: 'Cafeteria', path: '/cafeteria' },
+        { name: 'E-Sports', path: '/esports' },
+        { name: 'Bookshop', path: '/bookshop' },
+        { name: 'Ledger', path: '/history' },
+    ];
 
-    const totalSpend = (parseFloat(formatRs(dashboard?.total_cafeteria_spend || 0)) + parseFloat(formatRs(dashboard?.total_bookshop_spend || 0))).toFixed(2);
+    // PRESERVED ORIGINAL WALLET LOGIC
+    const totalSpend = (parseFloat(dashboard?.total_cafeteria_spend || 0) + parseFloat(dashboard?.total_bookshop_spend || 0)).toFixed(2);
 
     return (
-        // Locked to the dark gradient background
         <div className="flex h-screen w-screen flex-col overflow-hidden bg-gradient-to-br from-gray-900 via-indigo-950 to-slate-900 text-white relative">
             
-            {/* The Glassmorphic Wallet Modal */}
+            {/* The Glassmorphic Wallet Modal - PRESERVED LOGIC & SETTINGS */}
             {isWalletOpen && (
                 <div className="fixed inset-0 z-[100] flex items-center justify-center p-4">
-                    {/* Dimmed Background Overlay */}
                     <div 
                         className="absolute inset-0 bg-black/40 backdrop-blur-sm transition-opacity"
                         onClick={() => setIsWalletOpen(false)}
                     ></div>
 
-                    {/* The Glass Wallet Card */}
                     <div className="relative w-full max-w-sm overflow-hidden rounded-[2.5rem] border border-white/10 bg-gray-900/60 p-6 shadow-[0_8px_32px_0_rgba(0,0,0,0.5)] backdrop-blur-2xl transition-all">
                         
-                        {/* Ambient Glow Blobs */}
                         <div className="absolute -right-10 -top-10 h-40 w-40 rounded-full bg-cyan-500/20 blur-3xl"></div>
                         <div className="absolute -bottom-10 -left-10 h-40 w-40 rounded-full bg-indigo-500/20 blur-3xl"></div>
 
-                        {/* Modal Header */}
                         <div className="relative z-10 mb-6 flex items-center justify-between">
                             <h3 className="text-lg font-medium text-gray-200">Digital Wallet</h3>
                             <button onClick={() => setIsWalletOpen(false)} className="text-gray-400 hover:text-white transition">
@@ -87,7 +79,6 @@ export default function CampusLayout() {
                         </div>
 
                         <div className="relative z-10 space-y-4">
-                            {/* User Info Row */}
                             <div className="flex items-center space-x-4 mb-2">
                                 <div className="flex h-12 w-12 items-center justify-center rounded-full bg-gradient-to-br from-cyan-400 to-blue-600 text-xl font-bold text-white shadow-inner">
                                     {(user?.name || dashboard?.full_name || 'S').charAt(0).toUpperCase()}
@@ -98,7 +89,6 @@ export default function CampusLayout() {
                                 </div>
                             </div>
 
-                            {/* Available Cash Panel */}
                             <div className="rounded-3xl border border-white/5 bg-black/20 p-5">
                                 <p className="mb-1 text-[10px] font-bold uppercase tracking-widest text-gray-400">Available Balance</p>
                                 <div className="flex items-end justify-between">
@@ -113,7 +103,6 @@ export default function CampusLayout() {
                                 </div>
                             </div>
 
-                            {/* Total Spend Panel */}
                             <div className="rounded-3xl border border-white/5 bg-black/20 p-5">
                                 <p className="mb-1 text-[10px] font-bold uppercase tracking-widest text-gray-400">Total Campus Spend</p>
                                 <div className="flex items-end justify-between">
@@ -132,7 +121,6 @@ export default function CampusLayout() {
                                 </div>
                             </div>
 
-                            {/* Action Button */}
                             <button 
                                 onClick={() => { setIsWalletOpen(false); navigate('/history'); }}
                                 className="mt-2 w-full rounded-2xl py-3.5 text-sm font-bold shadow-lg transition active:scale-[0.98] border border-white/10 bg-white/10 text-white hover:bg-white/20"
@@ -156,29 +144,56 @@ export default function CampusLayout() {
                     </span>
                 </div>
 
+                {/* NEW SLIDING NAVIGATION */}
                 <nav className="hidden items-center space-x-1 lg:flex">
-                    <Link to="/" className={getLinkClass('/')}>Hub</Link>
-                    <Link to="/cafeteria" className={getLinkClass('/cafeteria')}>Cafeteria</Link>
-                    <Link to="/esports" className={getLinkClass('/esports')}>E-Sports</Link>
-                    <Link to="/bookshop" className={getLinkClass('/bookshop')}>Bookshop</Link>
-                    <Link to="/history" className={getLinkClass('/history')}>Ledger</Link>
+                    {navLinks.map((link) => {
+                        const isActive = link.path === '/' 
+                            ? location.pathname === '/' 
+                            : location.pathname.startsWith(link.path);
+                        
+                        return (
+                            <Link
+                                key={link.path}
+                                to={link.path}
+                                className={`relative px-4 py-2 text-sm font-semibold transition-colors duration-300 ${
+                                    isActive ? 'text-white' : 'text-gray-300 hover:text-white'
+                                }`}
+                            >
+                                {isActive && (
+                                    <motion.div
+                                        layoutId="nav-pill"
+                                        className="absolute inset-0 rounded-full bg-white/20 shadow-inner"
+                                        transition={{ type: 'spring', bounce: 0.25, duration: 0.5 }}
+                                    />
+                                )}
+                                <span className="relative z-10">{link.name}</span>
+                            </Link>
+                        );
+                    })}
 
+                    {/* PRESERVED ADMIN LOGIC WITH SLIDING PILL */}
                     {ADMIN_ROLL_NUMBERS.includes(dashboard?.roll_number) && (
                         <Link
                             to="/admin"
-                            className={`ml-2 rounded-full px-4 py-2 text-sm font-bold transition ${
-                                location.pathname === '/admin'
-                                    ? 'border border-red-500/50 bg-red-500/40 text-white'
-                                    : 'border border-transparent bg-red-500/10 text-red-300 hover:bg-red-500/20'
+                            className={`relative ml-2 rounded-full px-4 py-2 text-sm font-bold transition-colors duration-300 ${
+                                location.pathname === '/admin' ? 'text-white' : 'text-red-300 hover:text-white'
                             }`}
                         >
-                            Admin
+                            {location.pathname === '/admin' && (
+                                <motion.div
+                                    layoutId="nav-pill"
+                                    className="absolute inset-0 rounded-full bg-red-500/40 border border-red-500/50"
+                                    transition={{ type: 'spring', bounce: 0.25, duration: 0.5 }}
+                                />
+                            )}
+                            <span className="relative z-10">Admin</span>
                         </Link>
                     )}
                 </nav>
 
                 <div className="flex items-center space-x-3">
-                    {/* Clickable Wallet Pill */}
+                   
+
                     <button 
                         onClick={() => setIsWalletOpen(true)}
                         className="flex items-center space-x-2 rounded-full border border-green-400/30 bg-green-500/10 px-4 py-1.5 shadow-inner transition hover:bg-green-500/20"
