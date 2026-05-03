@@ -20,6 +20,9 @@ The entire frontend has been meticulously designed using modern UI/UX principles
 ![Bookshop Screenshot](assets/bookshop.png)
 ![Ledger Screenshot](assets/ledger.png)
 ![Admin Screenshot](assets/admin.png)
+![Login Screenshot](assets/login.png)
+![Reset Screenshot](assets/reset.png)
+![Register Screenshot](assets/register.png)
 ![Team Screenshot](assets/team.png)
 
 ### 🎮 The E-Sports Arcade
@@ -102,7 +105,7 @@ npm install
 Create a `.env` file in the `backend` directory:
 
 ```env
-PORT=5000
+PORT=5050
 DB_USER=postgres
 DB_PASSWORD=your_password
 DB_HOST=localhost
