@@ -12,6 +12,7 @@ const formatRs = (amount) => {
         maximumFractionDigits: 2
     });
 };
+
 // ── Add Item Modal ────────────────────────────────────────────────────────────
 function AddBookshopItemModal({ onClose, onAdded }) {
     const [form, setForm] = useState({
@@ -33,7 +34,7 @@ function AddBookshopItemModal({ onClose, onAdded }) {
                 item_category:  form.item_category,
                 isbn:           form.isbn.trim() || undefined,
                 author:         form.author.trim() || undefined,
-                price:          parseFloat(form.price),
+                price:          formatRs(parseFloat(form.price)),
                 stock_quantity: parseInt(form.stock_quantity),
             });
             setSuccess(res.data.message);
@@ -113,7 +114,7 @@ function AddBookshopItemModal({ onClose, onAdded }) {
                         <div>
                             <label className="block text-sm text-gray-400 mb-1">Price (Rs.) <span className="text-red-400">*</span></label>
                             <input
-                                type="number" required min="0.01" step="0.01" value={formatRs(form.price)}
+                                type="number" required min="0.01" step="0.01" value={form.price}
                                 onChange={e => set('price', e.target.value)}
                                 placeholder="e.g. 1200"
                                 className="w-full rounded-lg bg-gray-800 border border-gray-700 focus:border-blue-500 p-3 text-white outline-none transition"
@@ -122,7 +123,7 @@ function AddBookshopItemModal({ onClose, onAdded }) {
                         <div>
                             <label className="block text-sm text-gray-400 mb-1">Stock Qty <span className="text-red-400">*</span></label>
                             <input
-                                type="number" required min="0" step="1" value={formatRs(form.stock_quantity)}
+                                type="number" required min="0" step="1" value={form.stock_quantity}
                                 onChange={e => set('stock_quantity', e.target.value)}
                                 placeholder="e.g. 30"
                                 className="w-full rounded-lg bg-gray-800 border border-gray-700 focus:border-blue-500 p-3 text-white outline-none transition"
@@ -156,7 +157,7 @@ export default function Bookshop() {
     const [checkoutMsg, setCheckoutMsg] = useState('');
     const [showModal,   setShowModal]   = useState(false);
     
-    // NEW: Search State
+    // Search State
     const [searchQuery, setSearchQuery] = useState('');
 
     const { deductBalance, dashboard } = useStore();
@@ -168,6 +169,7 @@ export default function Bookshop() {
             .catch(() => { setError('Failed to load the bookshop inventory.'); setLoading(false); });
     }, []);
 
+    // Increments quantity, or adds new item if it doesn't exist
     const addToCart = (item) => setCart(prev => {
         const ex = prev.find(c => c.item_id === item.item_id);
         return ex
@@ -175,7 +177,18 @@ export default function Bookshop() {
             : [...prev, { ...item, quantity: 1 }];
     });
 
-    const removeFromCart = (id) => setCart(prev => prev.filter(c => c.item_id !== id));
+    // NEW: Decrements quantity, or removes item completely if quantity hits 0
+    const handleDecrement = (itemId) => setCart(prev => {
+        const existingItem = prev.find(c => c.item_id === itemId);
+        if (existingItem.quantity > 1) {
+            return prev.map(c => 
+                c.item_id === itemId ? { ...c, quantity: c.quantity - 1 } : c
+            );
+        } else {
+            return prev.filter(c => c.item_id !== itemId);
+        }
+    });
+
     const cartTotal = cart.reduce((t, i) => t + i.price * i.quantity, 0);
 
     const handleCheckout = async () => {
@@ -199,7 +212,7 @@ export default function Bookshop() {
         setInventory(prev => [...prev, newItem]);
     };
 
-    // NEW: Filter logic (checks name, category, author, and ISBN)
+    // Filter logic (checks name, category, author, and ISBN)
     const filteredInventory = inventory.filter(item => 
         item.item_name.toLowerCase().includes(searchQuery.toLowerCase()) ||
         item.item_category.toLowerCase().includes(searchQuery.toLowerCase()) ||
@@ -238,7 +251,7 @@ export default function Bookshop() {
                         )}
                     </div>
 
-                    {/* NEW: Search Bar UI */}
+                    {/* Search Bar UI */}
                     <div className="relative">
                         <input 
                             type="text" 
@@ -254,22 +267,23 @@ export default function Bookshop() {
                     {checkoutMsg && <div className="rounded bg-green-500/20 p-4 text-green-400 border border-green-500/50">{checkoutMsg}</div>}
 
                     <div className="grid grid-cols-1 gap-4 lg:grid-cols-2">
-                        {/* NEW: Empty state for search */}
+                        {/* Empty state for search */}
                         {filteredInventory.length === 0 && !loading && (
                             <p className="text-gray-500 col-span-2 text-center py-8">No items found matching "{searchQuery}"</p>
                         )}
-                        {/* NEW: Replaced inventory.map with filteredInventory.map */}
+                        
+                        {/* Inventory Items */}
                         {filteredInventory.map(item => (
                             <div key={item.item_id} className="flex flex-col justify-between rounded-xl border border-gray-700 bg-gray-800 p-5 shadow">
                                 <div>
                                     <div className="flex justify-between">
                                         <h3 className="font-bold text-white pr-4">{item.item_name}</h3>
-                                        <span className="font-semibold text-green-400 whitespace-nowrap">Rs. {item.price}</span>
+                                        <span className="font-semibold text-green-400 whitespace-nowrap">Rs. {formatRs(item.price)}</span>
                                     </div>
                                     <p className="mt-1 text-xs font-bold text-blue-400 uppercase tracking-wider">{item.item_category}</p>
                                     {item.author && <p className="mt-2 text-sm text-gray-400">By {item.author}</p>}
                                     {item.isbn   && <p className="mt-0.5 text-xs text-gray-600 font-mono">ISBN: {item.isbn}</p>}
-                                    <p className="mt-1 text-sm text-gray-500">Stock: {item.stock_quantity}</p>
+                                    <p className="mt-1 text-sm text-gray-500">Stock: {formatRs(item.stock_quantity)}</p>
                                 </div>
                                 <button onClick={() => addToCart(item)}
                                     className="mt-4 w-full rounded bg-blue-600 py-2 text-sm font-bold text-white transition hover:bg-blue-500">
@@ -283,27 +297,48 @@ export default function Bookshop() {
                 {/* RIGHT: Cart */}
                 <div className="w-80 rounded-xl border border-gray-700 bg-gray-800 p-6 flex flex-col h-[calc(100vh-10rem)] sticky top-0">
                     <h2 className="text-xl font-bold text-white mb-4 border-b border-gray-700 pb-2">Your Basket</h2>
-                    <div className="flex-1 overflow-y-auto space-y-4">
+                    <div className="flex-1 overflow-y-auto pr-2 space-y-1">
                         {cart.length === 0 ? (
-                            <p className="text-gray-500 text-sm">Your basket is empty.</p>
+                            <p className="text-gray-500 text-sm mt-2">Your basket is empty.</p>
                         ) : cart.map(item => (
-                            <div key={item.item_id} className="flex items-center justify-between">
+                            // NEW: Glassmorphic UI Pill for Cart Items
+                            <div key={item.item_id} className="flex items-center justify-between py-3 border-b border-white/5 last:border-0">
                                 <div className="pr-2">
-                                    <p className="text-sm text-white line-clamp-1" title={item.item_name}>{item.item_name} (x{item.quantity})</p>
-                                    <p className="text-xs text-gray-400">Rs. {item.price * item.quantity}</p>
+                                    <p className="text-sm font-medium text-white line-clamp-1" title={item.item_name}>{item.item_name}</p>
+                                    <p className="text-xs text-gray-400">Rs. {formatRs(item.price * item.quantity)}</p>
                                 </div>
-                                <button onClick={() => removeFromCart(item.item_id)} className="text-red-400 text-xs hover:text-red-300">Remove</button>
+                                
+                                <div className="flex items-center space-x-3 rounded-lg border border-white/10 bg-white/5 px-2 py-1 backdrop-blur-sm">
+                                    <button
+                                        onClick={() => handleDecrement(item.item_id)}
+                                        className="flex h-6 w-6 items-center justify-center rounded-md text-gray-400 transition hover:bg-red-500/20 hover:text-red-400"
+                                    >
+                                        -
+                                    </button>
+                                    
+                                    <span className="w-4 text-center text-sm font-bold text-white">
+                                        {item.quantity}
+                                    </span>
+                                    
+                                    <button
+                                        onClick={() => addToCart(item)}
+                                        className="flex h-6 w-6 items-center justify-center rounded-md text-gray-400 transition hover:bg-blue-500/20 hover:text-blue-400"
+                                    >
+                                        +
+                                    </button>
+                                </div>
                             </div>
                         ))}
                     </div>
+                    
                     <div className="mt-4 pt-4 border-t border-gray-700">
                         <div className="flex justify-between mb-4">
                             <span className="text-gray-400">Total:</span>
-                            <span className="font-bold text-green-400 text-xl">Rs. {cartTotal.toFixed(2)}</span>
+                            <span className="font-bold text-green-400 text-xl">Rs. {formatRs(cartTotal)}</span>
                         </div>
                         <button onClick={handleCheckout} disabled={cart.length === 0}
                             className={`w-full rounded py-3 font-bold text-white transition ${cart.length === 0 ? 'bg-gray-600 cursor-not-allowed' : 'bg-green-600 hover:bg-green-500'}`}>
-                            Pay with Wallet
+                            Checkout
                         </button>
                     </div>
                 </div>
