@@ -2,7 +2,7 @@ import axios from 'axios';
 import useStore from '../store/useStore';
 
 const axiosClient = axios.create({
-    baseURL: 'http://localhost:5000/api',
+    baseURL: 'http://localhost:5050/api',
 });
 
 // Automatically attach the token to every request

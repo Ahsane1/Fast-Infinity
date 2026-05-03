@@ -1,10 +1,28 @@
+import { useEffect } from 'react';
 import { Navigate, Outlet, Link, useNavigate, useLocation } from 'react-router-dom';
 import useStore from '../store/useStore';
+import axiosClient from '../api/axiosClient';
 
 export default function CampusLayout() {
-    const { token, user, dashboard, logout } = useStore();
+    // Added user and setDashboardData here
+    const { token, user, dashboard, logout, setDashboardData } = useStore();
     const navigate = useNavigate();
     const location = useLocation();
+
+    // The Reload Fix: globally fetches wallet data if missing on refresh
+    useEffect(() => {
+        if (token && user?.id && !dashboard) {
+            const fetchDashboard = async () => {
+                try {
+                    const response = await axiosClient.get(`/dashboard/${user.id}`);
+                    setDashboardData(response.data);
+                } catch (err) {
+                    console.error("Failed to fetch balance on reload", err);
+                }
+            };
+            fetchDashboard();
+        }
+    }, [token, user, dashboard, setDashboardData]);
 
     if (!token) {
         return <Navigate to="/login" replace />;
@@ -20,7 +38,7 @@ export default function CampusLayout() {
             ? location.pathname === '/'
             : location.pathname.startsWith(path);
         return `block p-3 rounded cursor-pointer transition ${
-            location.pathname === path ? 'bg-blue-600 text-white font-bold' : 'bg-gray-800 text-gray-300 hover:bg-gray-700'
+            active ? 'bg-blue-600 text-white font-bold' : 'bg-gray-800 text-gray-300 hover:bg-gray-700'
         }`;
     };
 
@@ -36,7 +54,8 @@ export default function CampusLayout() {
                     <Link to="/bookshop" className={getLinkClass('/bookshop')}>Bookshop</Link>
                     <Link to="/history" className={getLinkClass('/history')}>Transaction History</Link>
 
-                    {dashboard?.roll_number === '24L-0561' && (
+                    {/* Your exact multi-admin check */}
+                    {['24L-0561', '24L-3062', '24L-0556'].includes(dashboard?.roll_number) && (
                         <Link
                             to="/admin"
                             className={`block p-3 rounded cursor-pointer transition mt-8 ${
@@ -57,7 +76,10 @@ export default function CampusLayout() {
                 <header className="h-16 border-b border-gray-800 bg-gray-950 flex items-center justify-between px-8">
                     <span className="text-gray-400 capitalize">Location: {location.pathname === '/' ? 'Hub' : location.pathname.substring(1)}</span>
                     <div className="flex items-center space-x-4">
-                        <span className="font-bold text-green-400 text-lg">Wallet: Rs. {dashboard?.current_balance || '0.00'}</span>
+                        {/* Fallback to user?.balance to prevent 0.00 flash during load */}
+                        <span className="font-bold text-green-400 text-lg">
+                            Wallet: Rs. {dashboard?.current_balance || user?.balance || '0.00'}
+                        </span>
                         <button
                             onClick={handleLogout}
                             className="text-sm text-red-400 hover:text-red-300"
@@ -75,5 +97,3 @@ export default function CampusLayout() {
         </div>
     );
 }
-
-
