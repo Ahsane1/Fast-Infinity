@@ -51,8 +51,8 @@ export default function CampusLayout() {
         { name: 'Ledger', path: '/history' },
     ];
 
-    const monthlySpend = parseFloat(dashboard?.monthly_campus_spend || 0);
-
+    const monthlySpend = parseFloat(dashboard?.total_cafeteria_spend || 0) + parseFloat(dashboard?.total_bookshop_spend || 0);
+    
     return (
         <div className="relative h-screen w-screen overflow-hidden bg-black text-slate-100 dark:text-white">
             
@@ -68,39 +68,53 @@ export default function CampusLayout() {
                 transition={{ type: 'spring', bounce: 0, duration: 0.5 }}
                 className="flex h-full w-full flex-col overflow-hidden transition-colors duration-700 bg-gradient-to-br from-slate-800 via-slate-900 to-slate-950 dark:from-gray-900 dark:via-indigo-950 dark:to-black"
             >
-                {/* DIGITAL WALLET */}
-                <AnimatePresence mode="wait">
+                {/* --- DIGITAL WALLET (GLASS DROPDOWN) --- */}
+                <AnimatePresence>
                     {isWalletOpen && (
-                        <motion.div 
-                            key="wallet-modal-overlay"
-                            initial={{ opacity: 0 }} animate={{ opacity: 1 }} exit={{ opacity: 0 }}
-                            className="fixed inset-0 z-[100] flex items-center justify-center p-4"
-                        >
-                            <div className="absolute inset-0 bg-black/60 backdrop-blur-sm" onClick={() => setIsWalletOpen(false)} />
+                        <>
+                            {/* Invisible overlay to close wallet on outside click WITHOUT dimming the background */}
+                            <div 
+                                className="fixed inset-0 z-[90]" 
+                                onClick={() => setIsWalletOpen(false)} 
+                            />
+                            
                             <motion.div 
-                                key="wallet-modal-content"
-                                initial={{ scale: 0.9, opacity: 0, y: 20 }} animate={{ scale: 1, opacity: 1, y: 0 }} exit={{ scale: 0.9, opacity: 0, y: 20 }}
-                                className="relative w-full max-w-sm overflow-hidden rounded-[2.5rem] border border-white/10 bg-gray-900/80 p-6 shadow-2xl backdrop-blur-2xl"
+                                key="wallet-dropdown"
+                                initial={{ opacity: 0, scale: 0.9, y: -20, x: 10 }} 
+                                animate={{ opacity: 1, scale: 1, y: 0, x: 0 }} 
+                                exit={{ opacity: 0, scale: 0.9, y: -20, x: 10 }}
+                                transition={{ type: 'spring', stiffness: 300, damping: 25 }}
+                                className="fixed top-24 right-8 z-[100] w-full max-w-[320px] overflow-hidden rounded-[2rem] border border-white/20 bg-slate-900/40 p-6 shadow-[0_8px_32px_0_rgba(0,0,0,0.5)] backdrop-blur-3xl"
                             >
+                                {/* Subtle internal glass blobs */}
+                                <div className="absolute -right-10 -top-10 h-32 w-32 rounded-full bg-cyan-400/20 blur-2xl pointer-events-none" />
+                                <div className="absolute -bottom-10 -left-10 h-32 w-32 rounded-full bg-blue-500/20 blur-2xl pointer-events-none" />
+
                                 <div className="relative z-10 space-y-4">
-                                    <div className="flex items-center justify-between">
-                                        <h3 className="text-lg font-medium">Digital Wallet</h3>
-                                        <button onClick={() => setIsWalletOpen(false)} className="text-gray-400 hover:text-white">✕</button>
+                                    <div className="flex items-center justify-between border-b border-white/10 pb-3">
+                                        <h3 className="text-lg font-bold text-white shadow-sm">Digital Wallet</h3>
+                                        <button onClick={() => setIsWalletOpen(false)} className="text-gray-400 hover:text-white transition">✕</button>
                                     </div>
-                                    <div className="rounded-3xl border border-white/5 bg-black/20 p-5">
-                                        <p className="text-[10px] font-bold uppercase tracking-widest text-gray-400">Balance</p>
-                                        <span className="text-3xl font-black text-white">Rs. {formatRs(dashboard?.current_balance)}</span>
+                                    
+                                    <div className="rounded-2xl border border-white/10 bg-white/5 p-4 backdrop-blur-md shadow-inner">
+                                        <p className="mb-1 text-[10px] font-bold uppercase tracking-widest text-cyan-300">Balance</p>
+                                        <span className="text-3xl font-black text-white drop-shadow-md">Rs. {formatRs(dashboard?.current_balance)}</span>
                                     </div>
-                                    <div className="rounded-3xl border border-white/5 bg-black/20 p-5">
-                                        <p className="text-[10px] font-bold uppercase tracking-widest text-gray-400">Monthly Spend</p>
-                                        <span className="text-2xl font-bold text-gray-300">Rs. {formatRs(monthlySpend)}</span>
+                                    
+                                    <div className="rounded-2xl border border-white/10 bg-white/5 p-4 backdrop-blur-md shadow-inner">
+                                        <p className="mb-1 text-[10px] font-bold uppercase tracking-widest text-blue-300">Monthly Spend</p>
+                                        <span className="text-2xl font-bold text-gray-200 drop-shadow-md">Rs. {formatRs(monthlySpend)}</span>
                                     </div>
-                                    <button onClick={() => { setIsWalletOpen(false); navigate('/history'); }} className="w-full rounded-2xl py-3.5 text-sm font-bold border border-white/10 bg-white/10 text-white hover:bg-white/20 transition">
-                                        View Ledger
+                                    
+                                    <button 
+                                        onClick={() => { setIsWalletOpen(false); navigate('/history'); }} 
+                                        className="mt-2 w-full rounded-xl py-3 text-sm font-bold border border-white/20 bg-white/10 text-white hover:bg-white/20 transition-all shadow-lg active:scale-95"
+                                    >
+                                        View Full Ledger
                                     </button>
                                 </div>
                             </motion.div>
-                        </motion.div>
+                        </>
                     )}
                 </AnimatePresence>
 
@@ -138,10 +152,10 @@ export default function CampusLayout() {
                         <button onClick={() => toggleTheme()} className="flex h-9 w-9 items-center justify-center rounded-full bg-white/5 border border-white/10">
                             {theme === 'dark' ? '🌌' : '🌑'}
                         </button>
-                        <button onClick={() => setIsWalletOpen(true)} className="flex items-center space-x-2 rounded-full border border-green-500/30 bg-green-500/10 px-4 py-1.5 shadow-inner">
+                        <button onClick={() => setIsWalletOpen(true)} className="flex items-center space-x-2 rounded-full border border-green-500/30 bg-green-500/10 px-4 py-1.5 shadow-inner transition hover:bg-green-500/20">
                             <span className="text-sm font-bold text-green-300">Rs. {formatRs(dashboard?.current_balance)}</span>
                         </button>
-                        <button onClick={handleLogout} className="rounded-full border border-red-400/30 bg-red-500/10 px-4 py-1.5 text-sm font-bold text-red-300">Logout</button>
+                        <button onClick={handleLogout} className="rounded-full border border-red-400/30 bg-red-500/10 px-4 py-1.5 text-sm font-bold text-red-300 transition hover:bg-red-500/20">Logout</button>
                     </div>
                 </header>
                 
@@ -239,7 +253,6 @@ export default function CampusLayout() {
 
                                     <div className="relative z-10 flex flex-col items-center w-full">
                                         <div className="h-32 w-32 rounded-full overflow-hidden border-2 border-white/20 mb-6 shadow-inner bg-slate-800 flex items-center justify-center">
-                                            {/* Add moosa-profile.png to public folder later */}
                                             <img src="/moosa-profile.jpeg" alt="Muhammad Moosa" className="h-full w-full object-cover" onError={(e) => e.target.style.display = 'none'} />
                                             <span className="absolute text-4xl font-black text-white/30 -z-10">MM</span>
                                         </div>
@@ -274,7 +287,6 @@ export default function CampusLayout() {
 
                                     <div className="relative z-10 flex flex-col items-center w-full">
                                         <div className="h-32 w-32 rounded-full overflow-hidden border-2 border-white/20 mb-6 shadow-inner bg-slate-800 flex items-center justify-center">
-                                            {/* Add eman-profile.png to public folder later */}
                                             <img src="/eman-profile.jpg" alt="Eman Jameel" className="h-full w-full object-cover" onError={(e) => e.target.style.display = 'none'} />
                                             <span className="absolute text-4xl font-black text-white/30 -z-10">EJ</span>
                                         </div>
