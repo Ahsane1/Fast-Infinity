@@ -152,8 +152,8 @@ Once both the Node.js backend and the Vite frontend are running successfully:
 
 | Role | Contributor |
 |------|-------------|
-| Frontend Architecture, UI/UX & Arcade Integration | [Ahsan Omer] |
-| Backend API, Auth & Express Middleware | [Muhammad Moosa] |
-| PostgreSQL Architecture, ACID Transactions & Stored Procedures | [Eman Jameel] |
+| Frontend Architecture, UI/UX & Arcade Integration | Ahsan Omer |
+| Backend API, Auth & Express Middleware | Muhammad Moosa |
+| PostgreSQL Architecture, ACID Transactions & Stored Procedures | Eman Jameel |
 
 > Project successfully engineered for the **Database Systems** capstone requirement.
