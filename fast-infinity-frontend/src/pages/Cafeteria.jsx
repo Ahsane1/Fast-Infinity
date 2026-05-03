@@ -166,7 +166,7 @@ export default function Cafeteria() {
             : [...prev, { ...item, quantity: 1 }];
     });
 
-    // NEW: Decrements quantity, or removes item completely if quantity hits 0
+    // Decrements quantity, or removes item completely if quantity hits 0
     const handleDecrement = (itemId) => setCart(prev => {
         const existingItem = prev.find(c => c.item_id === itemId);
         if (existingItem.quantity > 1) {
@@ -284,7 +284,6 @@ export default function Cafeteria() {
                         {cart.length === 0 ? (
                             <p className="text-gray-500 text-sm mt-2">Your basket is empty.</p>
                         ) : cart.map(item => (
-                            // NEW: Glassmorphic UI Pill for Cart Items
                             <div key={item.item_id} className="flex items-center justify-between py-3 border-b border-white/5 last:border-0">
                                 <div>
                                     <p className="text-sm font-medium text-white">{item.item_name}</p>
@@ -315,12 +314,21 @@ export default function Cafeteria() {
                     </div>
                     
                     <div className="mt-4 pt-4 border-t border-gray-700">
-                        <div className="flex justify-between mb-4">
+                        <div className="flex justify-between mb-6">
                             <span className="text-gray-400">Total:</span>
                             <span className="font-bold text-green-400 text-xl">Rs. {formatRs(cartTotal)}</span>
                         </div>
-                        <button onClick={handleCheckout} disabled={cart.length === 0}
-                            className={`w-full rounded py-3 font-bold text-white transition ${cart.length === 0 ? 'bg-gray-600 cursor-not-allowed' : 'bg-green-600 hover:bg-green-500'}`}>
+                        
+                        {/* NEW: Modern Glassy Loop Button */}
+                        <button 
+                            onClick={handleCheckout} 
+                            disabled={cart.length === 0}
+                            className={`w-full rounded-full py-3.5 font-bold tracking-wide transition-all duration-300 backdrop-blur-md border ${
+                                cart.length === 0 
+                                    ? 'border-gray-600/30 bg-gray-600/10 text-gray-500 cursor-not-allowed' 
+                                    : 'border-green-500/50 bg-green-500/10 text-green-400 hover:bg-green-500/20 hover:text-green-300 hover:shadow-[0_0_20px_rgba(34,197,94,0.3)] hover:scale-[1.02] active:scale-95'
+                            }`}
+                        >
                             Checkout
                         </button>
                     </div>
