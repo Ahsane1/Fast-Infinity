@@ -2354,7 +2354,39 @@ BEGIN
 END;
 $$;
 
+DROP VIEW IF EXISTS vw_student_dashboard;
 
+CREATE VIEW vw_student_dashboard AS
+SELECT 
+    s.student_id, 
+    s.roll_number, 
+    s.full_name, 
+    s.current_balance,
+    COALESCE(g.total_game_earnings, 0) AS total_game_earnings,
+    COALESCE(c.total_cafeteria_spend, 0) AS total_cafeteria_spend,
+    COALESCE(b.total_bookshop_spend, 0) AS total_bookshop_spend,
+    COALESCE(g.total_game_sessions, 0) AS total_game_sessions,
+    COALESCE(c.total_cafeteria_orders, 0) AS total_cafeteria_orders,
+    COALESCE(b.total_bookshop_orders, 0) AS total_bookshop_orders
+FROM Students s
+LEFT JOIN (
+    SELECT student_id, SUM(cash_earned) AS total_game_earnings, COUNT(*) AS total_game_sessions
+    FROM Game_Sessions
+    WHERE status = 'PROCESSED'
+    GROUP BY student_id
+) g ON s.student_id = g.student_id
+LEFT JOIN (
+    SELECT student_id, SUM(total_amount) AS total_cafeteria_spend, COUNT(*) AS total_cafeteria_orders
+    FROM Cafeteria_Orders
+    WHERE status = 'COMPLETED'
+    GROUP BY student_id
+) c ON s.student_id = c.student_id
+LEFT JOIN (
+    SELECT student_id, SUM(total_amount) AS total_bookshop_spend, COUNT(*) AS total_bookshop_orders
+    FROM Bookshop_Orders
+    WHERE status = 'COMPLETED'
+    GROUP BY student_id
+) b ON s.student_id = b.student_id;
 
 
 
