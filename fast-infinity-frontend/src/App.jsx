@@ -14,6 +14,7 @@ import Tetris from './pages/games/Tetris';
 import ReactionTap from './pages/games/ReactionTap';
 import FlappyBird from './pages/games/FlappyBird';
 import MathBlaster from './pages/games/MathBlaster';
+import ForgotPassword from './pages/ForgotPassword';
 
 export default function App() {
     return (
@@ -22,6 +23,7 @@ export default function App() {
                 {/* Public Route */}
                 <Route path="/login" element={<Login />} />
                 <Route path="/register" element={<Register />} />
+                <Route path="/forgot-password" element={<ForgotPassword />} />
                 
                 {/* Protected Routes (Wrapped in the Layout) */}
                 <Route element={<CampusLayout />}>

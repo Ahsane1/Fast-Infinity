@@ -9,7 +9,7 @@ app.use(express.json());
 
 const { verifyToken } = require('./middleware/authMiddleware');
 
-const { loginStudent, registerStudent } = require('./controllers/authController');
+const { loginStudent, registerStudent, resetPassword } = require('./controllers/authController');
 const { getStudentDashboard } = require('./controllers/dashboardController');
 const { recordSession } = require('./controllers/gameController');
 const { placeOrder, getMenu } = require('./controllers/cafeteriaController');
@@ -25,6 +25,7 @@ app.get('/api/health', (req, res) => {
 // Auth (public)
 app.post('/api/auth/login', loginStudent);
 app.post('/api/auth/register', registerStudent);
+app.post('/api/auth/reset-password', resetPassword);
 
 // Dashboard
 app.get('/api/dashboard/:id', verifyToken, getStudentDashboard);
@@ -49,6 +50,7 @@ app.post('/api/admin/bookshop/add-item', verifyToken, addBookshopItem);
 // Wallet
 app.get('/api/wallet/history', verifyToken, getTransactionHistory);
 app.post('/api/wallet/refund', verifyToken, processRefund);
+
 
 const PORT = process.env.PORT || 5050;
 app.listen(PORT, () => {
